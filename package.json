@@ -1,6 +1,6 @@
 {
   "name": "@emmertarmin/memory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI-powered memory and context management for LLM applications",
   "homepage": "https://github.com/emmertarmin/memory#readme",
   "bugs": {
