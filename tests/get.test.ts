@@ -282,7 +282,7 @@ Thank you for reading.`;
   it("should work with tesla.md for real-world integration test", async () => {
     // This test verifies the workflow described in MEMORY_SPEC
     // First search, then get the results
-    const teslaPath = "/home/emmert/Work/mem/tesla.md";
+    const teslaPath = "/home/emmert/Documents/markdown/tesla.md";
 
     const proc = Bun.spawn({
       cmd: ["bun", "run", "src/index.ts", "get", teslaPath, "678", "698"],

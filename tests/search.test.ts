@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import * as fs from "fs/promises";
+import * as path from "path";
 import {
   getTestDb,
   setupTestDataDir,
@@ -8,6 +9,7 @@ import {
   cleanupTestDb,
   createTestFile,
   TEST_CONFIG_PATH,
+  TEST_DATA_DIR,
 } from "./setup";
 import { chunkText, createPreview } from "../src/chunker";
 import { embeddingToBuffer } from "../src/embeddings";
@@ -66,6 +68,141 @@ describe("Search Command", () => {
     await cleanupTestDb();
     await cleanupTestDataDir();
   });
+
+  it("should auto-index watched paths before searching", async () => {
+    // Test that search triggers auto-indexing when watched paths are configured
+    const watchedContent = `
+# Watched Content
+
+This is content in a watched directory.
+It should be automatically indexed before search runs.
+`.repeat(3);
+
+    const watchedDir = path.join(TEST_DATA_DIR, "watched");
+    await fs.mkdir(watchedDir, { recursive: true });
+    const watchedFile = path.join(watchedDir, "auto-index.md");
+    await Bun.write(watchedFile, watchedContent);
+
+    // Create config with watched path
+    const configWithWatched = {
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "sk-test-api-key-for-testing",
+      watched: [watchedDir],
+    };
+    await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(configWithWatched, null, 2));
+
+    // Run search - should auto-index first
+    const proc = Bun.spawn({
+      cmd: ["bun", "run", "src/index.ts", "search", "watched content"],
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, MEMORY_CONFIG_PATH: TEST_CONFIG_PATH },
+    });
+
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    // Search should complete (may error without real API key, but should not crash)
+    expect(exitCode === 0 || exitCode === 1 || exitCode === 4).toBe(true);
+
+    // If we have a real API key, check that auto-indexing occurred
+    if (hasRealApiKey && exitCode === 0) {
+      expect(stderr).toContain("Indexed"); // Should show indexing message
+      expect(stderr).toContain("new chunks");
+    }
+
+    // Reset config
+    const originalConfig = {
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "sk-test-api-key-for-testing",
+    };
+    await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(originalConfig, null, 2));
+  }, 60000);
+
+  it("should handle search gracefully when auto-indexing fails", async () => {
+    // Configure watched path that doesn't exist
+    const configWithBadWatched = {
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "sk-test-api-key-for-testing",
+      watched: ["/nonexistent/path/that/does/not/exist"],
+    };
+    await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(configWithBadWatched, null, 2));
+
+    // Create some pre-indexed content to search
+    const preIndexedContent = `
+# Pre-indexed Content
+
+This content was already indexed.
+Search should still work even if auto-indexing fails.
+`.repeat(3);
+
+    const filePath = await createTestFile("pre-indexed.md", preIndexedContent);
+
+    // Manually index the file
+    const hasher = new Bun.CryptoHasher("sha256");
+    hasher.update(preIndexedContent);
+    const hash = hasher.digest("hex");
+    const stats = await fs.stat(filePath);
+    const lastModified = Math.floor(stats.mtimeMs / 1000);
+    const lines = preIndexedContent.split("\n").length;
+
+    const fileInsert = db.query(`
+      INSERT INTO files (path, content_hash, last_modified, total_lines)
+      VALUES (?, ?, ?, ?)
+      RETURNING id
+    `);
+    const file = fileInsert.get(filePath, hash, lastModified, lines) as { id: number };
+
+    // Create chunks with mock embeddings
+    const chunks = chunkText(preIndexedContent, { targetTokens: 100, overlapTokens: 20 });
+    const chunkInsert = db.query(`
+      INSERT INTO chunks (file_id, start_line, end_line, token_count, content_preview, embedding)
+      VALUES (?, ?, ?, ?, ?, ?)
+      RETURNING id
+    `);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const mockEmbedding = new Float32Array(1536);
+      mockEmbedding[i % 1536] = 1.0;
+      chunkInsert.get(
+        file.id,
+        chunks[i].startLine,
+        chunks[i].endLine,
+        chunks[i].tokenCount,
+        createPreview(chunks[i].content),
+        embeddingToBuffer(mockEmbedding),
+      );
+    }
+
+    // Run search - auto-indexing should fail for bad path, but search should continue
+    const proc = Bun.spawn({
+      cmd: ["bun", "run", "src/index.ts", "search", "pre-indexed"],
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, MEMORY_CONFIG_PATH: TEST_CONFIG_PATH },
+    });
+
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    // Should show error about bad path but not crash
+    expect(stderr).toContain("Failed"); // Error about bad path
+    // But search should still attempt to run (may fail for other reasons)
+    expect(exitCode === 0 || exitCode === 1 || exitCode === 4).toBe(true);
+
+    // Reset config
+    const originalConfig = {
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "sk-test-api-key-for-testing",
+    };
+    await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(originalConfig, null, 2));
+  }, 30000);
 
   it("should return search results with correct schema", async () => {
     // Create test content and index it

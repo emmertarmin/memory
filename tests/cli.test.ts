@@ -105,10 +105,11 @@ More content here.
     });
 
     const exitCode = await proc.exited;
-    const stderr = await new Response(proc.stderr).text();
+    const stdout = await new Response(proc.stdout).text();
 
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain("FILE_NOT_FOUND");
+    expect(exitCode).toBe(0);
+    const output = JSON.parse(stdout.trim());
+    expect(output.indexed[0].status).toBe("error");
   });
 
   it.todo("should support custom chunk sizes via CLI flag", async () => {
@@ -154,7 +155,7 @@ More content here.
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain("memory - Markdown indexing and semantic search");
-    expect(stdout).toContain("index <path>");
+    expect(stdout).toContain("index");
     expect(stdout).toContain("setup");
   });
 
