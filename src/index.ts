@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import * as path from "path";
 import { stat } from "fs/promises";
+import { executeSearch } from "./search.js";
 import {
   initSchema,
   upsertFile,
@@ -313,6 +314,95 @@ async function setupCommand(_args: string[]) {
   }
 }
 
+// Parse search command arguments
+function parseSearchArgs(args: string[]) {
+  if (args.length === 0) {
+    console.error("Usage: memory search <query> [--top-k <n>] [--final <n>] [--no-rerank]");
+    console.error("");
+    console.error("Arguments:");
+    console.error("  <query>          Search query text");
+    console.error("  --top-k <n>      Initial retrieval count (default: 20)");
+    console.error("  --final <n>      Results after reranking (default: 5)");
+    console.error("  --no-rerank      Skip LLM reranking (faster, less precise)");
+    process.exit(1);
+  }
+
+  // First argument is the query (handle quoted queries)
+  let query = args[0];
+
+  // Handle help flags
+  if (query === "--help" || query === "-h") {
+    console.log("Usage: memory search <query> [options]");
+    console.log("");
+    console.log("Arguments:");
+    console.log("  <query>          Search query text");
+    console.log("  --top-k <n>      Initial retrieval count (default: 20)");
+    console.log("  --final <n>      Results after reranking (default: 5)");
+    console.log("  --no-rerank      Skip LLM reranking (faster, less precise)");
+    console.log("");
+    console.log("Examples:");
+    console.log('  memory search "AC Propulsion tzero range"');
+    console.log('  memory search "restic backup" --top-k 30 --final 10');
+    console.log('  memory search "systemd timers" --no-rerank');
+    process.exit(0);
+  }
+
+  let topK = 20;
+  let finalK = 5;
+  let noRerank = false;
+
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--top-k" && i + 1 < args.length) {
+      topK = parseInt(args[i + 1], 10);
+      i++;
+    } else if (arg === "--final" && i + 1 < args.length) {
+      finalK = parseInt(args[i + 1], 10);
+      i++;
+    } else if (arg === "--no-rerank") {
+      noRerank = true;
+    }
+  }
+
+  return {
+    query,
+    topK,
+    finalK,
+    noRerank,
+  };
+}
+
+// Search command handler
+async function searchCommand(args: string[]) {
+  const { query, topK, finalK, noRerank } = parseSearchArgs(args);
+
+  // Ensure config is set up before proceeding
+  const memConfig = await loadValidatedConfig();
+
+  // Initialize database
+  initSchema();
+
+  try {
+    const results = await executeSearch(query, memConfig, {
+      topK,
+      finalK,
+      noRerank,
+    });
+
+    console.log(JSON.stringify(results));
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        error: true,
+        code: "SEARCH_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+        command: "search",
+      }),
+    );
+    process.exit(4); // API error per MEMORY_SPEC
+  }
+}
+
 // Show global help
 function showHelp() {
   console.log("memory - Markdown indexing and semantic search");
@@ -321,11 +411,13 @@ function showHelp() {
   console.log("");
   console.log("Commands:");
   console.log("  index <path>    Index a file or directory");
+  console.log("  search <query>  Semantic search across indexed memories");
   console.log("  setup           Configure memory settings");
   console.log("");
   console.log("Examples:");
   console.log("  memory index lessons.md");
   console.log("  memory index ./notes/ --force");
+  console.log('  memory search "restic backup configuration"');
   console.log("  memory setup");
   console.log("");
   console.log("Run 'memory <command> --help' for more information on a command.");
@@ -346,6 +438,9 @@ async function main() {
   switch (command) {
     case "index":
       await indexCommand(commandArgs);
+      break;
+    case "search":
+      await searchCommand(commandArgs);
       break;
     case "setup":
       await setupCommand(commandArgs);

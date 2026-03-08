@@ -134,3 +134,107 @@ export function getChunksWithIdsByFileId(fileId: number): Array<ChunkRecord & { 
   const stmt = db.query("SELECT * FROM chunks WHERE file_id = ? ORDER BY start_line");
   return stmt.all(fileId) as Array<ChunkRecord & { id: number }>;
 }
+
+// Get all chunks with embeddings for vector similarity search
+export function getAllChunksWithEmbeddings(): Array<
+  ChunkRecord & { id: number; file_path: string }
+> {
+  const stmt = db.query(`
+    SELECT c.*, f.path as file_path 
+    FROM chunks c
+    JOIN files f ON c.file_id = f.id
+    WHERE c.embedding IS NOT NULL
+  `);
+  return stmt.all() as Array<ChunkRecord & { id: number; file_path: string }>;
+}
+
+// Search result interface
+export interface SearchResult {
+  chunkId: number;
+  fileId: number;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  contentPreview: string | null;
+  score: number;
+}
+
+// Calculate cosine similarity between two Float32Array embeddings
+export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) {
+    throw new Error(`Dimension mismatch: ${a.length} vs ${b.length}`);
+  }
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
+
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// Convert Buffer back to Float32Array
+export function bufferToFloat32Array(buffer: Buffer): Float32Array {
+  return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.length / 4);
+}
+
+// Find top-k similar chunks using cosine similarity
+export function findSimilarChunks(queryEmbedding: Float32Array, topK: number = 20): SearchResult[] {
+  const allChunks = getAllChunksWithEmbeddings();
+  const scored: SearchResult[] = [];
+
+  for (const chunk of allChunks) {
+    if (!chunk.embedding) continue;
+
+    const chunkEmbedding = bufferToFloat32Array(chunk.embedding as Buffer);
+    const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
+
+    scored.push({
+      chunkId: chunk.id,
+      fileId: chunk.file_id,
+      filePath: chunk.file_path,
+      startLine: chunk.start_line,
+      endLine: chunk.end_line,
+      contentPreview: chunk.content_preview,
+      score: similarity,
+    });
+  }
+
+  // Sort by score descending and return top K
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topK);
+}
+
+// Get full chunk content for reranking (fetches from file)
+export async function getChunkContent(
+  filePath: string,
+  startLine: number,
+  endLine: number,
+): Promise<string | null> {
+  try {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      return null;
+    }
+
+    const content = await file.text();
+    const lines = content.split("\n");
+
+    // Convert to 0-indexed and clamp to bounds
+    const start = Math.max(0, startLine - 1);
+    const end = Math.min(lines.length, endLine);
+
+    return lines.slice(start, end).join("\n");
+  } catch {
+    return null;
+  }
+}
