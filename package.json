@@ -3,16 +3,6 @@
   "version": "0.1.0",
   "description": "AI-powered memory and context management for LLM applications",
   "license": "MIT",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
   "bin": {
     "memory": "./dist/index.js"
   },
@@ -22,6 +12,16 @@
     "README.md",
     "LICENSE"
   ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "test": "bun test tests/*.test.ts",
     "tsc": "tsc --noEmit",

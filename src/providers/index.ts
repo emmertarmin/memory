@@ -22,7 +22,14 @@ export function createProvider(config: ProviderConfig): BaseProvider {
  * Get all available provider types and their schemas
  */
 export function getAvailableProviderSchemas(): ProviderConfigSchema[] {
-  return [new OpenAIProvider({ type: "openai", apiKey: "", embeddingModel: "", rerankModel: "" }).getConfigSchema()];
+  return [
+    new OpenAIProvider({
+      type: "openai",
+      apiKey: "",
+      embeddingModel: "",
+      rerankModel: "",
+    }).getConfigSchema(),
+  ];
 }
 
 /**
@@ -55,17 +62,29 @@ export function formatProviderSchema(schema: ProviderConfigSchema): string {
  * Generate help text for all available providers
  */
 export function generateProviderHelp(): string {
-  const fullConfigExample = JSON.stringify({
-    providers: [{ /* see provider-specific config below */ }],
-    watched: ["./docs", "./notes"]
-  }, null, 2);
+  const fullConfigExample = JSON.stringify(
+    {
+      providers: [
+        {
+          /* see provider-specific config below */
+        },
+      ],
+      watched: ["./docs", "./notes"],
+    },
+    null,
+    2,
+  );
 
-  const openaiExample = JSON.stringify({
-    type: "openai",
-    apiKey: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    embeddingModel: "text-embedding-3-small",
-    rerankModel: "gpt-5-mini"
-  }, null, 2);
+  const openaiExample = JSON.stringify(
+    {
+      type: "openai",
+      apiKey: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+    },
+    null,
+    2,
+  );
 
   const lines: string[] = [
     "Full config example:",
@@ -74,7 +93,7 @@ export function generateProviderHelp(): string {
     "OpenAI provider example:",
     "  " + openaiExample.replace(/\n/g, "\n  "),
     "",
-    "Note: The first provider in the array is used by default."
+    "Note: The first provider in the array is used by default.",
   ];
 
   return lines.join("\n");

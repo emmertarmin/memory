@@ -1,4 +1,10 @@
-import { BaseProvider, type BatchEmbeddingResult, type RerankRequest, type RerankResult, type ProviderConfigSchema } from "./base.js";
+import {
+  BaseProvider,
+  type BatchEmbeddingResult,
+  type RerankRequest,
+  type RerankResult,
+  type ProviderConfigSchema,
+} from "./base.js";
 
 export interface OpenAIProviderConfig {
   type: "openai";
@@ -200,7 +206,8 @@ export class OpenAIProvider extends BaseProvider {
         {
           key: "embeddingModel",
           type: "string",
-          description: "Model for embeddings (e.g., 'text-embedding-3-small', 'text-embedding-3-large')",
+          description:
+            "Model for embeddings (e.g., 'text-embedding-3-small', 'text-embedding-3-large')",
         },
         {
           key: "rerankModel",

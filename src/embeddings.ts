@@ -11,7 +11,7 @@ export async function generateEmbeddings(
   config: MemoryConfig,
 ): Promise<BatchEmbeddingResult> {
   const { provider, error } = getActiveProvider(config);
-  
+
   if (!provider || error) {
     return {
       results: [],
@@ -32,7 +32,7 @@ export async function generateEmbeddingsBatched(
   onProgress?: (completed: number, total: number) => void,
 ): Promise<BatchEmbeddingResult> {
   const { provider, error } = getActiveProvider(config);
-  
+
   if (!provider || error) {
     return {
       results: [],
@@ -41,7 +41,8 @@ export async function generateEmbeddingsBatched(
   }
 
   // Use provider's configured batch size or default to 100
-  const batchSize = (config.providers[0] as { embeddingBatchSize?: number }).embeddingBatchSize || 100;
+  const batchSize =
+    (config.providers[0] as { embeddingBatchSize?: number }).embeddingBatchSize || 100;
   const results: EmbeddingResult[] = [];
   const total = texts.length;
 
@@ -133,10 +134,10 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
  */
 export function getEmbeddingDimensions(config: MemoryConfig): number {
   const { provider, error } = getActiveProvider(config);
-  
+
   if (!provider || error) {
     return 1536; // default fallback
   }
-  
+
   return provider.getEmbeddingDimensions();
 }

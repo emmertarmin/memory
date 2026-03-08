@@ -60,7 +60,8 @@ describe("Search Command", () => {
 
     // Check if real API key exists
     const config = JSON.parse(await Bun.file(TEST_CONFIG_PATH).text());
-    hasRealApiKey = config.providers?.[0]?.apiKey && config.providers[0].apiKey !== "sk-test-api-key-for-testing";
+    hasRealApiKey =
+      config.providers?.[0]?.apiKey && config.providers[0].apiKey !== "sk-test-api-key-for-testing";
   });
 
   afterAll(async () => {

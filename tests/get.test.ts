@@ -309,8 +309,9 @@ Thank you for reading.`;
   it("should verify end-to-end workflow: search then get", async () => {
     // Skip if no real API key available
     const testConfig = JSON.parse(await Bun.file(TEST_CONFIG_PATH).text());
-    const hasRealApiKey = testConfig.providers?.[0]?.apiKey && 
-                          testConfig.providers[0].apiKey !== "sk-test-api-key-for-testing";
+    const hasRealApiKey =
+      testConfig.providers?.[0]?.apiKey &&
+      testConfig.providers[0].apiKey !== "sk-test-api-key-for-testing";
     if (!hasRealApiKey) {
       console.log("Skipping - no real API key available for end-to-end test");
       return;

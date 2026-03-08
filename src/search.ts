@@ -22,7 +22,7 @@ export async function rerankResults(
   }
 
   const { provider, error } = getActiveProvider(config);
-  
+
   if (!provider || error) {
     // Fall back to original scores if no provider available
     return results.map((result) => ({
@@ -33,7 +33,8 @@ export async function rerankResults(
   }
 
   // Get max concurrent from provider config or default
-  const maxConcurrent = (config.providers[0] as { rerankMaxConcurrent?: number }).rerankMaxConcurrent || 30;
+  const maxConcurrent =
+    (config.providers[0] as { rerankMaxConcurrent?: number }).rerankMaxConcurrent || 30;
   const batchSize = Math.min(results.length, maxConcurrent);
 
   // Create batches

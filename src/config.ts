@@ -12,7 +12,8 @@ const XDG_DATA_HOME = process.env["XDG_DATA_HOME"] || path.join(os.homedir(), ".
 export const CONFIG_DIR = process.env["MEMORY_CONFIG_PATH"]
   ? path.dirname(process.env["MEMORY_CONFIG_PATH"])
   : path.join(XDG_CONFIG_HOME, "memory");
-export const CONFIG_PATH = process.env["MEMORY_CONFIG_PATH"] || path.join(CONFIG_DIR, "config.json");
+export const CONFIG_PATH =
+  process.env["MEMORY_CONFIG_PATH"] || path.join(CONFIG_DIR, "config.json");
 export const DATA_DIR = path.join(XDG_DATA_HOME, "memory");
 
 /**
@@ -43,12 +44,12 @@ export async function loadConfig(): Promise<MemoryConfig | null> {
     }
     const content = await file.text();
     const parsed = JSON.parse(content);
-    
+
     // Validate that we have a providers array
     if (!parsed.providers || !Array.isArray(parsed.providers) || parsed.providers.length === 0) {
       return null;
     }
-    
+
     return {
       providers: parsed.providers,
       watched: parsed.watched || [],
@@ -72,16 +73,19 @@ export function getActiveProvider(config: MemoryConfig) {
   if (!config.providers || config.providers.length === 0) {
     return { provider: null, error: "No providers configured" };
   }
-  
+
   const providerConfig = config.providers[0];
   try {
     const provider = createProvider(providerConfig);
     const validation = provider.validateConfig();
-    
+
     if (!validation.valid) {
-      return { provider: null, error: `Provider validation failed: ${validation.errors.join(", ")}` };
+      return {
+        provider: null,
+        error: `Provider validation failed: ${validation.errors.join(", ")}`,
+      };
     }
-    
+
     return { provider, error: null };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -108,7 +112,7 @@ export function validateConfig(config: MemoryConfig): { valid: boolean; errors: 
   // Validate each provider
   for (let i = 0; i < config.providers.length; i++) {
     const providerConfig = config.providers[i];
-    
+
     if (!providerConfig.type) {
       errors.push(`provider[${i}]: type is required`);
       continue;
@@ -117,7 +121,7 @@ export function validateConfig(config: MemoryConfig): { valid: boolean; errors: 
     try {
       const provider = createProvider(providerConfig);
       const validation = provider.validateConfig();
-      
+
       if (!validation.valid) {
         errors.push(`provider[${i}] (${providerConfig.type}): ${validation.errors.join(", ")}`);
       }
@@ -135,15 +139,15 @@ function generateConfigErrorMessage(errors: string[]): string {
   const lines: string[] = [
     "Configuration error:",
     "",
-    ...errors.map(e => `  - ${e}`),
+    ...errors.map((e) => `  - ${e}`),
     "",
     "Configuration file location:",
     `  ${CONFIG_PATH}`,
     "",
   ];
-  
+
   lines.push(generateProviderHelp());
-  
+
   return lines.join("\n");
 }
 
@@ -158,7 +162,9 @@ export async function ensureConfig(): Promise<MemoryConfig> {
 
   const config = await loadConfig();
   if (!config) {
-    console.error(generateConfigErrorMessage(["Configuration file is invalid or missing required fields"]));
+    console.error(
+      generateConfigErrorMessage(["Configuration file is invalid or missing required fields"]),
+    );
     process.exit(5);
   }
 
@@ -187,6 +193,6 @@ export function generateConfigHelp(): string {
     "",
     generateProviderHelp(),
   ];
-  
+
   return lines.join("\n");
 }

@@ -121,10 +121,7 @@ export class CommandRegister {
     const cmd = this.get(commandName);
     if (!cmd) return null;
 
-    const lines: string[] = [
-      `Usage: memory ${cmd.usage}`,
-      "",
-    ];
+    const lines: string[] = [`Usage: memory ${cmd.usage}`, ""];
 
     if (cmd.arguments.length > 0) {
       lines.push("Arguments:");
@@ -275,11 +272,7 @@ async function indexFile(
 
   if (chunks.length > 0) {
     const chunkContents = chunks.map((c) => c.content);
-    const embeddingResult = await generateEmbeddingsBatched(
-      chunkContents,
-      memConfig,
-      () => {},
-    );
+    const embeddingResult = await generateEmbeddingsBatched(chunkContents, memConfig, () => {});
 
     if (embeddingResult.error) {
       throw new Error(`EMBEDDING_ERROR: ${embeddingResult.error}`);
@@ -403,7 +396,7 @@ interface EnsureFreshIndexResult {
 // Returns result object and logs errors only to stderr
 async function ensureFreshIndex(
   memConfig: MemoryConfig,
-  silent: boolean = true
+  silent: boolean = true,
 ): Promise<EnsureFreshIndexResult> {
   if (!memConfig.watched || memConfig.watched.length === 0) {
     return { updated: false, errors: [], indexed: 0, skipped: 0 };
@@ -540,10 +533,12 @@ function parseIndexArgs(args: string[], watchedPaths?: string[]) {
 
 async function indexCommand(args: string[]) {
   const memConfig = await loadValidatedConfig();
-  const { paths: targetPaths, force, config: chunkConfig, useWatched } = parseIndexArgs(
-    args,
-    memConfig.watched,
-  );
+  const {
+    paths: targetPaths,
+    force,
+    config: chunkConfig,
+    useWatched,
+  } = parseIndexArgs(args, memConfig.watched);
 
   initSchema();
   const startTime = Date.now();
@@ -551,17 +546,20 @@ async function indexCommand(args: string[]) {
 
   if (targetPaths.length === 0 && !useWatched) {
     const durationMs = Date.now() - startTime;
-    console.log(JSON.stringify({
-      indexed: [],
-      deleted,
-      statistics: {
-        totalChunksIndexed: 0,
-        totalChunksSkipped: 0,
-        totalChunksRemoved,
-        durationMs,
-      },
-      message: "No paths specified and no watched paths configured. Use 'memory index <path>' or configure watched paths.",
-    }));
+    console.log(
+      JSON.stringify({
+        indexed: [],
+        deleted,
+        statistics: {
+          totalChunksIndexed: 0,
+          totalChunksSkipped: 0,
+          totalChunksRemoved,
+          durationMs,
+        },
+        message:
+          "No paths specified and no watched paths configured. Use 'memory index <path>' or configure watched paths.",
+      }),
+    );
     return;
   }
 
@@ -603,16 +601,18 @@ async function indexCommand(args: string[]) {
   }
 
   const durationMs = Date.now() - startTime;
-  console.log(JSON.stringify({
-    indexed,
-    deleted,
-    statistics: {
-      totalChunksIndexed,
-      totalChunksSkipped,
-      totalChunksRemoved,
-      durationMs,
-    },
-  }));
+  console.log(
+    JSON.stringify({
+      indexed,
+      deleted,
+      statistics: {
+        totalChunksIndexed,
+        totalChunksSkipped,
+        totalChunksRemoved,
+        durationMs,
+      },
+    }),
+  );
 }
 
 function parseSearchArgs(args: string[]) {
@@ -658,17 +658,19 @@ async function searchCommand(args: string[]) {
   if (indexResult.updated) {
     console.error(`Indexed ${indexResult.indexed} new chunks before searching...`);
   }
-  
+
   try {
     const results = await executeSearch(query, memConfig, { topK, finalK, noRerank });
     console.log(JSON.stringify(results));
   } catch (error) {
-    console.error(JSON.stringify({
-      error: true,
-      code: "SEARCH_ERROR",
-      message: error instanceof Error ? error.message : String(error),
-      command: "search",
-    }));
+    console.error(
+      JSON.stringify({
+        error: true,
+        code: "SEARCH_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+        command: "search",
+      }),
+    );
     process.exit(4);
   }
 }
@@ -715,12 +717,14 @@ async function getCommand(args: string[]) {
   const file = Bun.file(filePath);
   const exists = await file.exists();
   if (!exists) {
-    console.error(JSON.stringify({
-      error: true,
-      code: "FILE_NOT_FOUND",
-      message: `File ${filePath} does not exist`,
-      command: "get",
-    }));
+    console.error(
+      JSON.stringify({
+        error: true,
+        code: "FILE_NOT_FOUND",
+        message: `File ${filePath} does not exist`,
+        command: "get",
+      }),
+    );
     process.exit(2);
   }
 
@@ -735,21 +739,25 @@ async function getCommand(args: string[]) {
     const wordCount = selectedContent.split(/\s+/).filter((w) => w.length > 0).length;
     const charCount = selectedContent.length;
 
-    console.log(JSON.stringify({
-      file: filePath,
-      start_line: clampedStart,
-      end_line: clampedEnd,
-      content: selectedContent,
-      word_count: wordCount,
-      char_count: charCount,
-    }));
+    console.log(
+      JSON.stringify({
+        file: filePath,
+        start_line: clampedStart,
+        end_line: clampedEnd,
+        content: selectedContent,
+        word_count: wordCount,
+        char_count: charCount,
+      }),
+    );
   } catch (error) {
-    console.error(JSON.stringify({
-      error: true,
-      code: "READ_ERROR",
-      message: error instanceof Error ? error.message : String(error),
-      command: "get",
-    }));
+    console.error(
+      JSON.stringify({
+        error: true,
+        code: "READ_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+        command: "get",
+      }),
+    );
     process.exit(2);
   }
 }
@@ -764,9 +772,7 @@ export function registerAllCommands(): void {
     name: "index",
     description: "Index a file or directory (or watched paths if no path specified)",
     usage: "index <path> [--force] [--chunk-size <n>] [--overlap <n>]",
-    arguments: [
-      { name: "<path>", description: "File or directory to index", optional: true },
-    ],
+    arguments: [{ name: "<path>", description: "File or directory to index", optional: true }],
     options: [
       { name: "--force", description: "Re-index even if file hash unchanged" },
       { name: "--chunk-size <n>", description: "Target chunk size in tokens (default: 400)" },
@@ -775,7 +781,10 @@ export function registerAllCommands(): void {
     examples: [
       { command: "index file.md", description: "Index single file" },
       { command: "index file.md --force", description: "Force re-index" },
-      { command: "index ./notes/ --chunk-size 300", description: "Index directory with custom chunk size" },
+      {
+        command: "index ./notes/ --chunk-size 300",
+        description: "Index directory with custom chunk size",
+      },
       { command: "index", description: "Index all watched paths from config" },
     ],
     handler: indexCommand,
@@ -785,9 +794,7 @@ export function registerAllCommands(): void {
     name: "search",
     description: "Semantic search across indexed memories",
     usage: "search <query> [options]",
-    arguments: [
-      { name: "<query>", description: "Search query text" },
-    ],
+    arguments: [{ name: "<query>", description: "Search query text" }],
     options: [
       { name: "--top-k <n>", description: "Initial retrieval count (default: 20)" },
       { name: "--final <n>", description: "Results after reranking (default: 5)" },
@@ -810,7 +817,8 @@ export function registerAllCommands(): void {
       { name: "<start_line>", description: "Starting line number (1-indexed)" },
       { name: "<end_line>", description: "Ending line number (1-indexed)" },
     ],
-    returns: '{ "file": "...", "start_line": N, "end_line": N, "content": "...", "word_count": N, "char_count": N }',
+    returns:
+      '{ "file": "...", "start_line": N, "end_line": N, "content": "...", "word_count": N, "char_count": N }',
     examples: [
       { command: "get ./journal/2026-03-07.md 45 52" },
       { command: "get tesla.md 678 698" },
@@ -823,9 +831,7 @@ export function registerAllCommands(): void {
     description: "Show configuration help and provider schemas",
     usage: "config",
     arguments: [],
-    examples: [
-      { command: "config", description: "Display configuration help" },
-    ],
+    examples: [{ command: "config", description: "Display configuration help" }],
     handler: configCommand,
   });
 
