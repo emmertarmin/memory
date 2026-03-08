@@ -70,6 +70,25 @@ export function getFileByPath(filePath: string): FileRecord | null {
   return stmt.get(filePath) as FileRecord | null;
 }
 
+// Get all files from the database
+export function getAllFiles(): FileRecord[] {
+  const stmt = db.query("SELECT * FROM files");
+  return stmt.all() as FileRecord[];
+}
+
+// Delete a file and its associated chunks (cascades via FK)
+export function deleteFile(fileId: number): void {
+  const stmt = db.query("DELETE FROM files WHERE id = ?");
+  stmt.run(fileId);
+}
+
+// Count chunks for a file
+export function countChunksForFile(fileId: number): number {
+  const stmt = db.query("SELECT COUNT(*) as count FROM chunks WHERE file_id = ?");
+  const result = stmt.get(fileId) as { count: number };
+  return result.count;
+}
+
 // Insert or replace file record
 export function upsertFile(
   filePath: string,

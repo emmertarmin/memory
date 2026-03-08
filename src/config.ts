@@ -22,6 +22,7 @@ export interface MemoryConfig {
   embeddingModel: string; // e.g., "text-embedding-3-small"
   rerankModel: string; // e.g., "gpt-5-mini"
   apiKey: string;
+  watched?: string[]; // Optional: folders/files to watch for auto-indexing
 }
 
 // Default configuration - minimal, user-configurable only
@@ -29,6 +30,7 @@ export const DEFAULT_CONFIG: MemoryConfig = {
   embeddingModel: "text-embedding-3-small",
   rerankModel: "gpt-5-mini",
   apiKey: "",
+  watched: [],
 };
 
 // Hardcoded OpenAI configuration (not user-configurable)
@@ -261,12 +263,35 @@ export async function runSetup(): Promise<MemoryConfig> {
     }
     config.apiKey = apiKey;
 
+    // Watch configuration (optional)
+    console.log("\n📁 Watch Configuration (Optional)");
+    console.log("---------------------------------");
+    console.log("Specify folders or files to auto-index when running 'memory index' without arguments.");
+    console.log("Separate multiple paths with commas. Leave empty to skip.\n");
+
+    const existingWatched = config.watched?.join(", ") || "";
+    const watchedInput = await promptInputWithDefault(
+      rl,
+      "Folders/files to watch",
+      existingWatched,
+    );
+    if (watchedInput.trim()) {
+      config.watched = watchedInput.split(",").map((p) => p.trim()).filter((p) => p.length > 0);
+    } else {
+      config.watched = [];
+    }
+
     // Summary
     console.log("\n✅ Configuration Summary");
     console.log("------------------------");
     console.log(`Embedding model: ${config.embeddingModel}`);
     console.log(`Rerank model: ${config.rerankModel}`);
     console.log(`API key: ${maskApiKey(config.apiKey)}`);
+    if (config.watched && config.watched.length > 0) {
+      console.log(`Watched paths: ${config.watched.join(", ")}`);
+    } else {
+      console.log("Watched paths: (none)");
+    }
 
     // Save config
     await saveConfig(config);

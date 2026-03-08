@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import * as path from "path";
+import * as os from "os";
 import { stat } from "fs/promises";
 import { executeSearch } from "./search.js";
 import {
@@ -10,16 +11,68 @@ import {
   getFileByPath,
   getChunksWithIdsByFileId,
   updateChunkEmbedding,
+  getAllFiles,
+  deleteFile,
+  countChunksForFile,
 } from "./db.js";
 import { chunkText, createPreview, type ChunkerConfig } from "./chunker.js";
 import { ensureConfig, validateConfig, runSetup, type MemoryConfig } from "./config.js";
 import { generateEmbeddingsBatched, embeddingToBuffer } from "./embeddings.js";
+
+// Expand tilde (~) to home directory
+function expandTilde(filePath: string): string {
+  if (filePath.startsWith("~/")) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  if (filePath === "~") {
+    return os.homedir();
+  }
+  return filePath;
+}
 
 // Compute SHA-256 hash of file content
 async function computeHash(content: string): Promise<string> {
   const hasher = new Bun.CryptoHasher("sha256");
   hasher.update(content);
   return hasher.digest("hex");
+}
+
+// Check if file exists on disk
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    const file = Bun.file(filePath);
+    return await file.exists();
+  } catch {
+    return false;
+  }
+}
+
+// Clean up orphaned DB entries for files that no longer exist
+async function cleanupOrphanedFiles(): Promise<{
+  deleted: Array<{
+    file: string;
+    chunksRemoved: number;
+  }>;
+  totalChunksRemoved: number;
+}> {
+  const allFiles = getAllFiles();
+  const deleted: Array<{ file: string; chunksRemoved: number }> = [];
+  let totalChunksRemoved = 0;
+
+  for (const dbFile of allFiles) {
+    const exists = await fileExists(dbFile.path);
+    if (!exists) {
+      const chunksBefore = countChunksForFile(dbFile.id);
+      deleteFile(dbFile.id);
+      deleted.push({
+        file: dbFile.path,
+        chunksRemoved: chunksBefore,
+      });
+      totalChunksRemoved += chunksBefore;
+    }
+  }
+
+  return { deleted, totalChunksRemoved };
 }
 
 // Index a single file
@@ -30,11 +83,11 @@ async function indexFile(
   force: boolean = false,
 ): Promise<{
   file: string;
+  chunkSize: number;
   chunksIndexed: number;
+  chunksSkipped: number;
   linesTotal: number;
   status: string;
-  skipped?: boolean;
-  embeddingsGenerated?: number;
 }> {
   // Check file exists
   const file = Bun.file(filePath);
@@ -54,12 +107,15 @@ async function indexFile(
   // Check if file needs reindexing
   const existingFile = getFileByPath(filePath);
   if (existingFile && existingFile.content_hash === contentHash && !force) {
+    // Get chunk count for this existing file
+    const existingChunks = getChunksWithIdsByFileId(existingFile.id);
     return {
       file: filePath,
+      chunkSize: chunkConfig.targetTokens,
       chunksIndexed: 0,
+      chunksSkipped: existingChunks.length,
       linesTotal: totalLines,
-      status: "skipped",
-      skipped: true,
+      status: "success",
     };
   }
 
@@ -90,7 +146,6 @@ async function indexFile(
   }
 
   // Generate embeddings for all chunks
-  let embeddingsGenerated = 0;
   if (chunks.length > 0) {
     const chunkContents = chunks.map((c) => c.content);
     const embeddingResult = await generateEmbeddingsBatched(
@@ -112,16 +167,16 @@ async function indexFile(
       const chunkId = storedChunks[result.index].id;
       const embeddingBuffer = embeddingToBuffer(result.embedding);
       updateChunkEmbedding(chunkId, embeddingBuffer);
-      embeddingsGenerated++;
     }
   }
 
   return {
     file: filePath,
+    chunkSize: chunkConfig.targetTokens,
     chunksIndexed: chunks.length,
+    chunksSkipped: 0,
     linesTotal: totalLines,
-    status: "indexed",
-    embeddingsGenerated,
+    status: "success",
   };
 }
 
@@ -148,48 +203,55 @@ async function indexDirectory(
   memConfig: MemoryConfig,
   force: boolean = false,
 ): Promise<{
-  directory: string;
-  filesIndexed: number;
-  filesSkipped: number;
-  totalChunks: number;
-  totalEmbeddings: number;
+  indexed: Array<{
+    file: string;
+    chunkSize: number;
+    chunksIndexed: number;
+    chunksSkipped: number;
+    linesTotal: number;
+    status: string;
+  }>;
+  statistics: {
+    totalChunksIndexed: number;
+    totalChunksSkipped: number;
+  };
 }> {
   const mdFiles = await findMarkdownFiles(dirPath);
-
-  let filesIndexed = 0;
-  let filesSkipped = 0;
-  let totalChunks = 0;
-  let totalEmbeddings = 0;
+  const indexed: Array<{
+    file: string;
+    chunkSize: number;
+    chunksIndexed: number;
+    chunksSkipped: number;
+    linesTotal: number;
+    status: string;
+  }> = [];
+  let totalChunksIndexed = 0;
+  let totalChunksSkipped = 0;
 
   for (const filePath of mdFiles) {
     try {
       const result = await indexFile(filePath, chunkConfig, memConfig, force);
-      if (result.skipped) {
-        filesSkipped++;
-      } else {
-        filesIndexed++;
-        totalChunks += result.chunksIndexed;
-        totalEmbeddings += result.embeddingsGenerated || 0;
-      }
-      // Output progress for each file
-      console.log(JSON.stringify(result));
+      indexed.push(result);
+      totalChunksIndexed += result.chunksIndexed;
+      totalChunksSkipped += result.chunksSkipped;
     } catch (error) {
-      console.log(
-        JSON.stringify({
-          error: true,
-          file: filePath,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      indexed.push({
+        file: filePath,
+        chunkSize: chunkConfig.targetTokens,
+        chunksIndexed: 0,
+        chunksSkipped: 0,
+        linesTotal: 0,
+        status: "error",
+      });
     }
   }
 
   return {
-    directory: dirPath,
-    filesIndexed,
-    filesSkipped,
-    totalChunks,
-    totalEmbeddings,
+    indexed,
+    statistics: {
+      totalChunksIndexed,
+      totalChunksSkipped,
+    },
   };
 }
 
@@ -204,16 +266,35 @@ async function isDirectory(p: string): Promise<boolean> {
 }
 
 // Parse index command arguments
-function parseIndexArgs(args: string[]) {
+function parseIndexArgs(args: string[], watchedPaths?: string[]) {
+  // Handle case when no path is provided
   if (args.length === 0) {
-    console.error("Usage: memory index <path> [--force] [--chunk-size <n>] [--overlap <n>]");
-    console.error("");
-    console.error("Arguments:");
-    console.error("  <path>           File or directory to index");
-    console.error("  --force          Re-index even if file hash unchanged");
-    console.error("  --chunk-size <n> Target chunk size in tokens (default: 400)");
-    console.error("  --overlap <n>    Overlap between chunks in tokens (default: 50)");
-    process.exit(1);
+    // Check if we have watched paths from config
+    if (watchedPaths && watchedPaths.length > 0) {
+      // Return a special marker to indicate we should use watched paths
+      return {
+        paths: watchedPaths.map((p) => path.resolve(expandTilde(p))),
+        force: false,
+        config: {
+          targetTokens: 400,
+          overlapTokens: 50,
+          lineBoundary: true,
+        } as ChunkerConfig,
+        useWatched: true,
+      };
+    }
+    
+    // No path provided and no watched paths - return empty to indicate no indexing
+    return {
+      paths: [],
+      force: false,
+      config: {
+        targetTokens: 400,
+        overlapTokens: 50,
+        lineBoundary: true,
+      } as ChunkerConfig,
+      useWatched: false,
+    };
   }
 
   const pathArg = args[0];
@@ -221,9 +302,10 @@ function parseIndexArgs(args: string[]) {
   // Handle help flags
   if (pathArg === "--help" || pathArg === "-h") {
     console.log("Usage: memory index <path> [--force] [--chunk-size <n>] [--overlap <n>]");
+    console.log("       memory index                 # Index watched paths from config");
     console.log("");
     console.log("Arguments:");
-    console.log("  <path>           File or directory to index");
+    console.log("  <path>           File or directory to index (optional if watched paths set)");
     console.log("  --force          Re-index even if file hash unchanged");
     console.log("  --chunk-size <n> Target chunk size in tokens (default: 400)");
     console.log("  --overlap <n>    Overlap between chunks in tokens (default: 50)");
@@ -234,6 +316,7 @@ function parseIndexArgs(args: string[]) {
     console.log(
       "  memory index ./notes/ --chunk-size 300     # Index directory with custom chunk size",
     );
+    console.log("  memory index                               # Index all watched paths");
     process.exit(0);
   }
 
@@ -255,13 +338,14 @@ function parseIndexArgs(args: string[]) {
   }
 
   return {
-    path: path.resolve(pathArg),
+    paths: [path.resolve(expandTilde(pathArg))],
     force,
     config: {
       targetTokens: chunkSize,
       overlapTokens: overlap,
       lineBoundary: true,
     } as ChunkerConfig,
+    useWatched: false,
   };
 }
 
@@ -288,20 +372,88 @@ async function indexCommand(args: string[]) {
   const memConfig = await loadValidatedConfig();
 
   // Use config values for chunking if not overridden by CLI
-  const { path: targetPath, force, config: chunkConfig } = parseIndexArgs(args);
+  const { paths: targetPaths, force, config: chunkConfig, useWatched } = parseIndexArgs(
+    args,
+    memConfig.watched,
+  );
 
   // Initialize database
   initSchema();
 
-  const isDir = await isDirectory(targetPath);
+  const startTime = Date.now();
 
-  if (isDir) {
-    const result = await indexDirectory(targetPath, chunkConfig, memConfig, force);
-    console.log(JSON.stringify(result));
-  } else {
-    const result = await indexFile(targetPath, chunkConfig, memConfig, force);
-    console.log(JSON.stringify(result));
+  // First, clean up orphaned files (run for both single file and directory)
+  const { deleted, totalChunksRemoved } = await cleanupOrphanedFiles();
+
+  // Handle case when no paths to index (no watched paths and no arguments)
+  if (targetPaths.length === 0 && !useWatched) {
+    const durationMs = Date.now() - startTime;
+    console.log(JSON.stringify({
+      indexed: [],
+      deleted,
+      statistics: {
+        totalChunksIndexed: 0,
+        totalChunksSkipped: 0,
+        totalChunksRemoved,
+        durationMs,
+      },
+      message: "No paths specified and no watched paths configured. Use 'memory index <path>' or configure watched paths.",
+    }));
+    return;
   }
+
+  let indexed: Array<{
+    file: string;
+    chunkSize: number;
+    chunksIndexed: number;
+    chunksSkipped: number;
+    linesTotal: number;
+    status: string;
+  }> = [];
+  let totalChunksIndexed = 0;
+  let totalChunksSkipped = 0;
+
+  // Index all target paths (either watched paths or single specified path)
+  for (const targetPath of targetPaths) {
+    const isDir = await isDirectory(targetPath);
+
+    if (isDir) {
+      const dirResult = await indexDirectory(targetPath, chunkConfig, memConfig, force);
+      indexed = indexed.concat(dirResult.indexed);
+      totalChunksIndexed += dirResult.statistics.totalChunksIndexed;
+      totalChunksSkipped += dirResult.statistics.totalChunksSkipped;
+    } else {
+      // Single file indexing
+      try {
+        const result = await indexFile(targetPath, chunkConfig, memConfig, force);
+        indexed.push(result);
+        totalChunksIndexed += result.chunksIndexed;
+        totalChunksSkipped += result.chunksSkipped;
+      } catch (error) {
+        indexed.push({
+          file: targetPath,
+          chunkSize: chunkConfig.targetTokens,
+          chunksIndexed: 0,
+          chunksSkipped: 0,
+          linesTotal: 0,
+          status: "error",
+        });
+      }
+    }
+  }
+
+  const durationMs = Date.now() - startTime;
+
+  console.log(JSON.stringify({
+    indexed,
+    deleted,
+    statistics: {
+      totalChunksIndexed,
+      totalChunksSkipped,
+      totalChunksRemoved,
+      durationMs,
+    },
+  }));
 }
 
 // Setup command handler
@@ -523,13 +675,15 @@ function showHelp() {
   console.log("");
   console.log("Commands:");
   console.log("  index <path>    Index a file or directory");
+  console.log("  index           Index watched paths (if configured via setup)");
   console.log("  search <query>  Semantic search across indexed memories");
   console.log("  get <file> <start> <end>  Get content from line range");
-  console.log("  setup           Configure memory settings");
+  console.log("  setup           Configure memory settings and watched paths");
   console.log("");
   console.log("Examples:");
   console.log("  memory index lessons.md");
   console.log("  memory index ./notes/ --force");
+  console.log("  memory index               # Index watched paths from config");
   console.log('  memory search "restic backup configuration"');
   console.log("  memory get tesla.md 678 698");
   console.log("  memory setup");
