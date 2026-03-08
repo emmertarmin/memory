@@ -1,5 +1,5 @@
 {
-  "name": "@emmert/memory",
+  "name": "@emmertarmin/memory",
   "version": "0.1.0",
   "description": "AI-powered memory and context management for LLM applications",
   "license": "MIT",
