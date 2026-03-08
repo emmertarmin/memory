@@ -403,6 +403,118 @@ async function searchCommand(args: string[]) {
   }
 }
 
+// Get command handler
+async function getCommand(args: string[]) {
+  const parsed = parseGetArgs(args);
+  const { file: filePath, startLine, endLine } = parsed;
+
+  // File exists check
+  const file = Bun.file(filePath);
+  const exists = await file.exists();
+  if (!exists) {
+    console.error(
+      JSON.stringify({
+        error: true,
+        code: "FILE_NOT_FOUND",
+        message: `File ${filePath} does not exist`,
+        command: "get",
+      }),
+    );
+    process.exit(2);
+  }
+
+  try {
+    const content = await file.text();
+    const lines = content.split("\n");
+    const totalLines = lines.length;
+
+    // Validate and clamp line ranges (1-indexed)
+    const clampedStart = Math.max(1, Math.min(startLine, totalLines));
+    const clampedEnd = Math.max(clampedStart, Math.min(endLine, totalLines));
+
+    // Extract content (convert to 0-indexed)
+    const selectedLines = lines.slice(clampedStart - 1, clampedEnd);
+    const selectedContent = selectedLines.join("\n");
+
+    // Calculate metadata
+    const wordCount = selectedContent.split(/\s+/).filter((w) => w.length > 0).length;
+    const charCount = selectedContent.length;
+
+    const result = {
+      file: filePath,
+      start_line: clampedStart,
+      end_line: clampedEnd,
+      content: selectedContent,
+      word_count: wordCount,
+      char_count: charCount,
+    };
+
+    console.log(JSON.stringify(result));
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        error: true,
+        code: "READ_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+        command: "get",
+      }),
+    );
+    process.exit(2);
+  }
+}
+
+// Parse get command arguments
+function parseGetArgs(args: string[]) {
+  // Handle help flags first (before length check)
+  if (args[0] === "--help" || args[0] === "-h") {
+    console.log("Usage: memory get <file> <start_line> <end_line>");
+    console.log("");
+    console.log("Arguments:");
+    console.log("  <file>        Path to the markdown file");
+    console.log("  <start_line>  Starting line number (1-indexed)");
+    console.log("  <end_line>    Ending line number (1-indexed)");
+    console.log("");
+    console.log("Returns:");
+    console.log('  { "file": "...", "start_line": N, "end_line": N, "content": "...", "word_count": N, "char_count": N }');
+    console.log("");
+    console.log("Examples:");
+    console.log("  memory get ./journal/2026-03-07.md 45 52");
+    console.log("  memory get tesla.md 678 698");
+    process.exit(0);
+  }
+
+  if (args.length < 3) {
+    console.error("Usage: memory get <file> <start_line> <end_line>");
+    console.error("");
+    console.error("Arguments:");
+    console.error("  <file>        Path to the markdown file");
+    console.error("  <start_line>  Starting line number (1-indexed)");
+    console.error("  <end_line>    Ending line number (1-indexed)");
+    console.error("");
+    console.error("Examples:");
+    console.error("  memory get ./journal/2026-03-07.md 45 52");
+    console.error("  memory get tesla.md 678 698");
+    process.exit(1);
+  }
+
+  const filePath = path.resolve(args[0]);
+  const startLine = parseInt(args[1], 10);
+  const endLine = parseInt(args[2], 10);
+
+  if (isNaN(startLine) || isNaN(endLine)) {
+    console.error("Error: Line numbers must be valid integers");
+    process.exit(1);
+  }
+
+  // Note: we don't validate for positive here - let clamping handle out-of-range values
+  if (startLine > endLine) {
+    console.error("Error: start_line must be less than or equal to end_line");
+    process.exit(1);
+  }
+
+  return { file: filePath, startLine, endLine };
+}
+
 // Show global help
 function showHelp() {
   console.log("memory - Markdown indexing and semantic search");
@@ -412,12 +524,14 @@ function showHelp() {
   console.log("Commands:");
   console.log("  index <path>    Index a file or directory");
   console.log("  search <query>  Semantic search across indexed memories");
+  console.log("  get <file> <start> <end>  Get content from line range");
   console.log("  setup           Configure memory settings");
   console.log("");
   console.log("Examples:");
   console.log("  memory index lessons.md");
   console.log("  memory index ./notes/ --force");
   console.log('  memory search "restic backup configuration"');
+  console.log("  memory get tesla.md 678 698");
   console.log("  memory setup");
   console.log("");
   console.log("Run 'memory <command> --help' for more information on a command.");
@@ -441,6 +555,9 @@ async function main() {
       break;
     case "search":
       await searchCommand(commandArgs);
+      break;
+    case "get":
+      await getCommand(commandArgs);
       break;
     case "setup":
       await setupCommand(commandArgs);
