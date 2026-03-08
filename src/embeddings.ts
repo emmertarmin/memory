@@ -16,9 +16,9 @@ export interface BatchEmbeddingResult {
  */
 export async function generateEmbeddings(
   texts: string[],
-  config: MemoryConfig["embedding"],
+  config: MemoryConfig,
 ): Promise<BatchEmbeddingResult> {
-  if (!config.api_key || config.api_key.trim() === "") {
+  if (!config.apiKey || config.apiKey.trim() === "") {
     return {
       results: [],
       error: "OpenAI API key is not configured",
@@ -35,24 +35,34 @@ export async function generateEmbeddings(
     };
   }
 
+  // Infer dimensions from model name
+  const dimensions = config.embeddingModel.includes("large")
+    ? 3072
+    : config.embeddingModel.includes("small")
+      ? 1536
+      : 1536;
+
   try {
     const response = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.api_key}`,
+        Authorization: `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         input: validTexts,
-        model: config.model,
-        dimensions: config.dimensions,
+        model: config.embeddingModel,
+        dimensions: dimensions,
         encoding_format: "float",
       }),
     });
 
     if (!response.ok) {
-      const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
-      const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
+      const errorData = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      const errorMessage =
+        errorData.error?.message || `API request failed with status ${response.status}`;
       return {
         results: [],
         error: errorMessage,
@@ -97,10 +107,10 @@ export async function generateEmbeddings(
  */
 export async function generateEmbeddingsBatched(
   texts: string[],
-  config: MemoryConfig["embedding"],
+  config: MemoryConfig,
   onProgress?: (completed: number, total: number) => void,
 ): Promise<BatchEmbeddingResult> {
-  const batchSize = config.batch_size || 100;
+  const batchSize = 100; // Hardcoded batch size
   const results: EmbeddingResult[] = [];
   const total = texts.length;
 

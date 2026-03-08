@@ -342,15 +342,15 @@ describe("Indexer - Future Features (TDD)", () => {
 
   it("should generate embeddings via OpenAI API when key is available", async () => {
     const testConfig = await loadTestConfig();
-    
+
     // Only test with real API key
-    if (!testConfig.embedding.api_key || testConfig.embedding.api_key === "sk-test-api-key-for-testing") {
+    if (!testConfig.apiKey || testConfig.apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping - no real API key available");
       return;
     }
 
     const content = "Text to embed";
-    const apiKey = testConfig.embedding.api_key;
+    const apiKey = testConfig.apiKey;
     expect(apiKey).toBeDefined();
 
     // Call OpenAI API directly
@@ -362,7 +362,7 @@ describe("Indexer - Future Features (TDD)", () => {
       },
       body: JSON.stringify({
         input: content,
-        model: testConfig.embedding.model,
+        model: testConfig.embeddingModel,
       }),
     });
 
@@ -370,14 +370,15 @@ describe("Indexer - Future Features (TDD)", () => {
 
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
     expect(data.data[0].embedding).toBeDefined();
-    expect(data.data[0].embedding.length).toBe(testConfig.embedding.dimensions);
+    // Dimensions are inferred from model name (1536 for "small" models)
+    expect(data.data[0].embedding.length).toBe(1536);
   }, 10000);
 
   it("should batch embedding requests for efficiency", async () => {
     const testConfig = await loadTestConfig();
-    
+
     // Only test with real API key
-    if (!testConfig.embedding.api_key || testConfig.embedding.api_key === "sk-test-api-key-for-testing") {
+    if (!testConfig.apiKey || testConfig.apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping - no real API key available");
       return;
     }
@@ -415,15 +416,22 @@ describe("Indexer - Future Features (TDD)", () => {
 
     const chunkIds: number[] = [];
     for (const chunk of chunks) {
-      const result = chunkInsert.get(file.id, chunk.startLine, chunk.endLine, chunk.tokenCount, createPreview(chunk.content), null) as { id: number };
+      const result = chunkInsert.get(
+        file.id,
+        chunk.startLine,
+        chunk.endLine,
+        chunk.tokenCount,
+        createPreview(chunk.content),
+        null,
+      ) as { id: number };
       chunkIds.push(result.id);
     }
 
     // Generate embeddings in batches
     const { generateEmbeddingsBatched, embeddingToBuffer } = await import("../src/embeddings");
     const embeddingResult = await generateEmbeddingsBatched(
-      chunks.map(c => c.content),
-      testConfig.embedding,
+      chunks.map((c) => c.content),
+      testConfig,
     );
 
     expect(embeddingResult.error).toBeUndefined();
@@ -440,31 +448,29 @@ describe("Indexer - Future Features (TDD)", () => {
     }
 
     // Verify embeddings were stored
-    const selectStmt = db.query("SELECT embedding FROM chunks WHERE file_id = ? AND embedding IS NOT NULL");
+    const selectStmt = db.query(
+      "SELECT embedding FROM chunks WHERE file_id = ? AND embedding IS NOT NULL",
+    );
     const storedEmbeddings = selectStmt.all(file.id) as Array<{ embedding: Buffer }>;
-    
+
     expect(storedEmbeddings.length).toBe(chunks.length);
-    
+
     for (const row of storedEmbeddings) {
       expect(row.embedding).toBeDefined();
-      expect(row.embedding.length).toBe(testConfig.embedding.dimensions * 4);
+      // 1536 dimensions * 4 bytes per float
+      expect(row.embedding.length).toBe(1536 * 4);
     }
   }, 30000); // 30 second timeout for API calls
 
   it("should handle API errors gracefully", async () => {
     const { generateEmbeddings } = await import("../src/embeddings");
-    
+
     // Test with invalid API key
-    const result = await generateEmbeddings(
-      ["test content"],
-      {
-        provider: "openai",
-        model: "text-embedding-3-small",
-        dimensions: 1536,
-        api_key: "sk-invalid-test-key",
-        batch_size: 100,
-      }
-    );
+    const result = await generateEmbeddings(["test content"], {
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "sk-invalid-test-key",
+    });
 
     expect(result.error).toBeDefined();
     expect(result.results.length).toBe(0);
@@ -475,7 +481,7 @@ describe("Indexer - Future Features (TDD)", () => {
     const dir1 = path.join(testDir, "nested");
     const dir2 = path.join(dir1, "deep");
     await fs.mkdir(dir2, { recursive: true });
-    
+
     // Create markdown files at different levels
     await Bun.write(path.join(dir2, "file1.md"), "# Deep content");
     await Bun.write(path.join(dir1, "file2.md"), "# Shallow content");
@@ -492,7 +498,7 @@ describe("Indexer - Future Features (TDD)", () => {
     }
 
     expect(files.length).toBeGreaterThanOrEqual(3);
-    expect(files.some(f => f.includes("deep"))).toBe(true);
-    expect(files.some(f => f.includes("nested"))).toBe(true);
+    expect(files.some((f) => f.includes("deep"))).toBe(true);
+    expect(files.some((f) => f.includes("nested"))).toBe(true);
   });
 });

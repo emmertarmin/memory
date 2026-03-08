@@ -16,64 +16,35 @@ const DATA_DIR = path.join(XDG_DATA_HOME, "memory");
 
 export { CONFIG_DIR, CONFIG_PATH, DATA_DIR };
 
-export interface EmbeddingConfig {
-  provider: string;
-  model: string;
-  dimensions: number;
-  api_key: string;
-  batch_size: number;
-}
-
-export interface RerankConfig {
-  provider: string;
-  model: string;
-  api_key: string;
-  timeout_ms: number;
-  max_concurrent: number;
-}
-
-export interface ChunkingConfig {
-  target_tokens: number;
-  overlap_tokens: number;
-  line_boundary: boolean;
-}
-
-export interface DatabaseConfig {
-  path: string;
-  wal_mode: boolean;
-}
-
+// Simplified config - only user-settable values
+// Everything else (provider, timeouts, batch sizes) is hardcoded for OpenAI
 export interface MemoryConfig {
-  embedding: EmbeddingConfig;
-  rerank: RerankConfig;
-  chunking: ChunkingConfig;
-  database: DatabaseConfig;
+  embeddingModel: string; // e.g., "text-embedding-3-small"
+  rerankModel: string; // e.g., "gpt-5-mini"
+  apiKey: string;
 }
 
-// Default configuration
+// Default configuration - minimal, user-configurable only
 export const DEFAULT_CONFIG: MemoryConfig = {
+  embeddingModel: "text-embedding-3-small",
+  rerankModel: "gpt-5-mini",
+  apiKey: "",
+};
+
+// Hardcoded OpenAI configuration (not user-configurable)
+export const OPENAI_CONFIG = {
+  provider: "openai" as const,
   embedding: {
-    provider: "openai",
-    model: "text-embedding-3-small",
-    dimensions: 1536,
-    api_key: "",
-    batch_size: 100,
+    batchSize: 100,
+    getDimensions: (model: string): number => {
+      if (model.includes("large")) return 3072;
+      if (model.includes("small")) return 1536;
+      return 1536; // default
+    },
   },
   rerank: {
-    provider: "openai",
-    model: "gpt-4o-mini",
-    api_key: "",
-    timeout_ms: 5000,
-    max_concurrent: 30,
-  },
-  chunking: {
-    target_tokens: 400,
-    overlap_tokens: 50,
-    line_boundary: true,
-  },
-  database: {
-    path: path.join(DATA_DIR, "index.sqlite"),
-    wal_mode: true,
+    timeoutMs: 5000,
+    maxConcurrent: 30,
   },
 };
 
@@ -121,12 +92,16 @@ export async function saveConfig(config: MemoryConfig): Promise<void> {
 export function validateConfig(config: MemoryConfig): { valid: boolean; missing: string[] } {
   const missing: string[] = [];
 
-  if (!config.embedding?.api_key || config.embedding.api_key.trim() === "") {
-    missing.push("OpenAI API key for embeddings");
+  if (!config.apiKey || config.apiKey.trim() === "") {
+    missing.push("OpenAI API key");
   }
 
-  if (!config.embedding?.model || config.embedding.model.trim() === "") {
+  if (!config.embeddingModel || config.embeddingModel.trim() === "") {
     missing.push("Embedding model");
+  }
+
+  if (!config.rerankModel || config.rerankModel.trim() === "") {
+    missing.push("Rerank model");
   }
 
   return {
@@ -251,54 +226,47 @@ export async function runSetup(): Promise<MemoryConfig> {
 
     // Load existing config if available
     const existingConfig = await loadConfig();
-    const config: MemoryConfig = existingConfig
-      ? JSON.parse(JSON.stringify(existingConfig))
-      : JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    const config: MemoryConfig = existingConfig ? { ...existingConfig } : { ...DEFAULT_CONFIG };
     const isReconfiguring = !!existingConfig;
 
     if (isReconfiguring) {
       console.log("ℹ️  Existing configuration found. Press Enter to keep current values.\n");
     }
 
-    // Embedding model configuration
-    console.log("📊 Embedding Configuration");
-    console.log("---------------------------");
+    // Model configuration
+    console.log("📊 Model Configuration");
+    console.log("-----------------------");
 
-    const currentModel = config.embedding.model;
-    const model = await promptInputWithDefault(rl, "Embedding model", currentModel);
-    config.embedding.model = model;
+    // Embedding model
+    const embeddingModel = await promptInputWithDefault(
+      rl,
+      "Embedding model",
+      config.embeddingModel,
+    );
+    config.embeddingModel = embeddingModel;
 
-    // Adjust dimensions based on model if changed
-    if (model !== currentModel) {
-      if (config.embedding.model.includes("large")) {
-        config.embedding.dimensions = 3072;
-      } else if (config.embedding.model.includes("small")) {
-        config.embedding.dimensions = 1536;
-      } else {
-        const currentDims = config.embedding.dimensions.toString();
-        const dims = await promptInputWithDefault(rl, "Embedding dimensions", currentDims);
-        config.embedding.dimensions = parseInt(dims, 10) || 1536;
-      }
-    }
+    // Rerank model
+    const rerankModel = await promptInputWithDefault(rl, "Rerank model", config.rerankModel);
+    config.rerankModel = rerankModel;
 
     // API Key
     console.log("\n🔑 API Configuration");
     console.log("--------------------");
+    console.log("OpenAI is used for both embedding and reranking.\n");
 
-    const apiKey = await promptSecretWithDefault(rl, "OpenAI API key", config.embedding.api_key);
+    const apiKey = await promptSecretWithDefault(rl, "OpenAI API key", config.apiKey);
     if (!apiKey || apiKey.trim() === "") {
       console.error("❌ API key is required. Setup aborted.");
       process.exit(1);
     }
-    config.embedding.api_key = apiKey;
-    config.rerank.api_key = apiKey; // Use same API key for reranking
+    config.apiKey = apiKey;
 
     // Summary
     console.log("\n✅ Configuration Summary");
     console.log("------------------------");
-    console.log(`Embedding model: ${config.embedding.model}`);
-    console.log(`Dimensions: ${config.embedding.dimensions}`);
-    console.log(`API key: ${maskApiKey(config.embedding.api_key)}`);
+    console.log(`Embedding model: ${config.embeddingModel}`);
+    console.log(`Rerank model: ${config.rerankModel}`);
+    console.log(`API key: ${maskApiKey(config.apiKey)}`);
 
     // Save config
     await saveConfig(config);

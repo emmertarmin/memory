@@ -28,8 +28,7 @@ More content here.
 
     // Check if we have a real API key
     const testConfig = JSON.parse(await Bun.file(TEST_CONFIG_PATH).text());
-    const hasRealApiKey = testConfig.embedding.api_key && 
-                          testConfig.embedding.api_key !== "sk-test-api-key-for-testing";
+    const hasRealApiKey = testConfig.apiKey && testConfig.apiKey !== "sk-test-api-key-for-testing";
 
     if (!hasRealApiKey) {
       console.log("Skipping - no real API key available for CLI test");
@@ -65,8 +64,7 @@ More content here.
 
     // Check if we have a real API key
     const testConfig = JSON.parse(await Bun.file(TEST_CONFIG_PATH).text());
-    const hasRealApiKey = testConfig.embedding.api_key && 
-                          testConfig.embedding.api_key !== "sk-test-api-key-for-testing";
+    const hasRealApiKey = testConfig.apiKey && testConfig.apiKey !== "sk-test-api-key-for-testing";
 
     if (!hasRealApiKey) {
       console.log("Skipping - no real API key available for skip test");
@@ -123,11 +121,11 @@ More content here.
     // Create nested structure using actual Bun.Glob like src/index.ts does
     const dir1 = path.join(testDir, "nested");
     const dir2 = path.join(dir1, "deep");
-    
+
     // Create directories
     await Bun.write(path.join(dir2, "file.md"), "content");
     await Bun.write(path.join(dir1, "shallow.md"), "shallow content");
-    
+
     // Test that Bun.Glob finds all files recursively
     const glob = new Bun.Glob("**/*.md");
     const files: string[] = [];
@@ -139,8 +137,8 @@ More content here.
     }
 
     expect(files.length).toBeGreaterThanOrEqual(2);
-    expect(files.some(f => f.includes("deep"))).toBe(true);
-    expect(files.some(f => f.includes("shallow"))).toBe(true);
+    expect(files.some((f) => f.includes("deep"))).toBe(true);
+    expect(files.some((f) => f.includes("shallow"))).toBe(true);
   });
 
   it("should show help when no command provided", async () => {

@@ -94,7 +94,7 @@ async function indexFile(
     const chunkContents = chunks.map((c) => c.content);
     const embeddingResult = await generateEmbeddingsBatched(
       chunkContents,
-      memConfig.embedding,
+      memConfig,
       (completed, total) => {
         // Silent progress - could add verbose mode later
         void completed;
@@ -146,7 +146,13 @@ async function indexDirectory(
   chunkConfig: ChunkerConfig,
   memConfig: MemoryConfig,
   force: boolean = false,
-): Promise<{ directory: string; filesIndexed: number; filesSkipped: number; totalChunks: number; totalEmbeddings: number }> {
+): Promise<{
+  directory: string;
+  filesIndexed: number;
+  filesSkipped: number;
+  totalChunks: number;
+  totalEmbeddings: number;
+}> {
   const mdFiles = await findMarkdownFiles(dirPath);
 
   let filesIndexed = 0;

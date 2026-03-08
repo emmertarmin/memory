@@ -27,11 +27,9 @@ describe("Embeddings Generation", () => {
 
   it("should fail gracefully with invalid API key", async () => {
     const result = await generateEmbeddings(["test text"], {
-      provider: "openai",
-      model: "text-embedding-3-small",
-      dimensions: 1536,
-      api_key: "invalid-key",
-      batch_size: 100,
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "invalid-key",
     });
 
     expect(result.error).toBeDefined();
@@ -40,11 +38,9 @@ describe("Embeddings Generation", () => {
 
   it("should fail gracefully with empty API key", async () => {
     const result = await generateEmbeddings(["test text"], {
-      provider: "openai",
-      model: "text-embedding-3-small",
-      dimensions: 1536,
-      api_key: "",
-      batch_size: 100,
+      embeddingModel: "text-embedding-3-small",
+      rerankModel: "gpt-5-mini",
+      apiKey: "",
     });
 
     expect(result.error).toBe("OpenAI API key is not configured");
@@ -53,7 +49,7 @@ describe("Embeddings Generation", () => {
 
   it("should fail gracefully with empty texts", async () => {
     const config = await loadTestConfig();
-    const result = await generateEmbeddings([], config.embedding);
+    const result = await generateEmbeddings([], config);
 
     expect(result.error).toBe("No valid texts to embed");
     expect(result.results.length).toBe(0);
@@ -63,32 +59,33 @@ describe("Embeddings Generation", () => {
     // This test uses the real API key from the environment/config
     // It will be skipped if no valid API key is available
     const config = await loadTestConfig();
-    
+
     // Check if we're using a real API key (not the test key)
-    if (!config.embedding.api_key || config.embedding.api_key === "sk-test-api-key-for-testing") {
+    if (!config.apiKey || config.apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping real API test - using test API key");
       return;
     }
 
-    const result = await generateEmbeddings(["Hello world", "This is a test"], config.embedding);
+    const result = await generateEmbeddings(["Hello world", "This is a test"], config);
 
     expect(result.error).toBeUndefined();
     expect(result.results.length).toBe(2);
-    expect(result.results[0].embedding.length).toBe(config.embedding.dimensions || 1536);
-    expect(result.results[1].embedding.length).toBe(config.embedding.dimensions || 1536);
+    // Dimensions are inferred from model name (1536 for "small" models)
+    expect(result.results[0].embedding.length).toBe(1536);
+    expect(result.results[1].embedding.length).toBe(1536);
   }, 10000); // 10 second timeout for API call
 
   it("should batch process multiple texts", async () => {
     const config = await loadTestConfig();
-    
+
     // Check if we're using a real API key
-    if (!config.embedding.api_key || config.embedding.api_key === "sk-test-api-key-for-testing") {
+    if (!config.apiKey || config.apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping batch test - using test API key");
       return;
     }
 
     const texts = Array(10).fill("Test text for batching");
-    const result = await generateEmbeddingsBatched(texts, config.embedding);
+    const result = await generateEmbeddingsBatched(texts, config);
 
     expect(result.error).toBeUndefined();
     expect(result.results.length).toBe(10);
@@ -104,7 +101,7 @@ describe("Embedding Utilities", () => {
 
     const reconstructed = bufferToEmbedding(buffer);
     expect(reconstructed.length).toBe(5);
-    
+
     for (let i = 0; i < original.length; i++) {
       expect(reconstructed[i]).toBeCloseTo(original[i], 5);
     }
@@ -112,7 +109,7 @@ describe("Embedding Utilities", () => {
 
   it("should validate embedding dimensions correctly", () => {
     const embedding = new Float32Array(1536);
-    
+
     const validResult = validateEmbedding(embedding, 1536);
     expect(validResult.valid).toBe(true);
 

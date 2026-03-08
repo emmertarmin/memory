@@ -19,31 +19,11 @@ export function getTestDb() {
 }
 
 export async function setupTestDataDir() {
-  // Create test config file
+  // Create test config file - simplified structure
   const testConfig = {
-    embedding: {
-      provider: "openai",
-      model: "text-embedding-3-small",
-      dimensions: 1536,
-      api_key: "sk-test-api-key-for-testing",
-      batch_size: 100,
-    },
-    rerank: {
-      provider: "openai",
-      model: "gpt-4o-mini",
-      api_key: "sk-test-api-key-for-testing",
-      timeout_ms: 5000,
-      max_concurrent: 30,
-    },
-    chunking: {
-      target_tokens: 400,
-      overlap_tokens: 50,
-      line_boundary: true,
-    },
-    database: {
-      path: TEST_DB_PATH,
-      wal_mode: true,
-    },
+    embeddingModel: "text-embedding-3-small",
+    rerankModel: "gpt-5-mini",
+    apiKey: "sk-test-api-key-for-testing",
   };
 
   await writeFile(TEST_CONFIG_PATH, JSON.stringify(testConfig, null, 2));
