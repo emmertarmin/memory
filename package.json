@@ -6,21 +6,12 @@
   "bugs": {
     "url": "https://github.com/emmertarmin/memory/issues"
   },
+  "license": "MIT",
+  "author": "Armin Emmert",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/emmertarmin/memory.git"
   },
-  "license": "MIT",
-  "author": "Armin Emmert",
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "bin": {
     "memory": "dist/index.js"
   },
@@ -33,6 +24,16 @@
     "README.md",
     "LICENSE"
   ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "test": "bun test tests/*.test.ts",
     "tsc": "tsc --noEmit",
@@ -51,6 +52,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "module": "./dist/index.js"
+  }
 }
