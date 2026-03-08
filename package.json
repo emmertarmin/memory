@@ -1,19 +1,40 @@
 {
-  "name": "memory",
+  "name": "@emmert/memory",
   "version": "0.1.0",
-  "bin": {
-    "memory": "./src/index.ts"
-  },
+  "description": "AI-powered memory and context management for LLM applications",
+  "license": "MIT",
   "type": "module",
-  "module": "index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "memory": "./dist/index.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "bun test tests/*.test.ts",
-    "tsc": "tsc --noEmit"
+    "tsc": "tsc --noEmit",
+    "prebuild": "bun -e \"import p from './package.json' with {type:'json'}; await Bun.write('src/version.ts', 'export const VERSION = \\\"' + p.version + '\\\";\\n')\"",
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run clean && bun run build"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/bun": "latest",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

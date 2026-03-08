@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { commandRegister, registerAllCommands } from "./commands.js";
+import { commandRegister, registerAllCommands, versionCommand } from "./commands.js";
 
 // Register all commands
 registerAllCommands();
@@ -11,6 +11,12 @@ async function main() {
   // Show global help if no command or help flag
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
     console.log(commandRegister.generateGlobalHelp());
+    process.exit(0);
+  }
+
+  // Handle --version flag
+  if (args[0] === "--version") {
+    versionCommand([]);
     process.exit(0);
   }
 

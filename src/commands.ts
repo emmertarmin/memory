@@ -17,6 +17,7 @@ import {
 import { chunkText, createPreview, type ChunkerConfig } from "./chunker.js";
 import { ensureConfig, validateConfig, generateConfigHelp, type MemoryConfig } from "./config.js";
 import { generateEmbeddingsBatched, embeddingToBuffer } from "./embeddings.js";
+import { VERSION } from "./version.js";
 
 // Command argument definition
 export interface CommandArgument {
@@ -40,19 +41,24 @@ export interface CommandDefinition {
   options?: CommandArgument[];
   examples: CommandExample[];
   returns?: string;
+  shorthand?: string;
   handler: (args: string[]) => Promise<void> | void;
 }
 
 // Command register - single source of truth for all commands
 export class CommandRegister {
   private commands: Map<string, CommandDefinition> = new Map();
+  private shorthands: Map<string, string> = new Map();
 
   register(command: CommandDefinition): void {
     this.commands.set(command.name, command);
+    if (command.shorthand) {
+      this.shorthands.set(command.shorthand, command.name);
+    }
   }
 
   get(name: string): CommandDefinition | undefined {
-    return this.commands.get(name);
+    return this.commands.get(name) ?? this.commands.get(this.shorthands.get(name) ?? "");
   }
 
   getAll(): CommandDefinition[] {
@@ -60,7 +66,7 @@ export class CommandRegister {
   }
 
   has(name: string): boolean {
-    return this.commands.has(name);
+    return this.commands.has(name) || this.shorthands.has(name);
   }
 
   // Generate global help text
@@ -77,7 +83,8 @@ export class CommandRegister {
     const maxNameLength = Math.max(...this.getAll().map((c) => c.name.length));
 
     for (const cmd of this.getAll()) {
-      const paddedName = cmd.name.padEnd(maxNameLength);
+      const nameWithShorthand = cmd.shorthand ? `${cmd.name}, ${cmd.shorthand}` : cmd.name;
+      const paddedName = nameWithShorthand.padEnd(maxNameLength + 4);
       lines.push(`  ${paddedName}  ${cmd.description}`);
     }
 
@@ -698,6 +705,10 @@ function parseGetArgs(args: string[]) {
   return { file: filePath, startLine, endLine };
 }
 
+export function versionCommand(_args: string[]) {
+  console.log(VERSION);
+}
+
 async function getCommand(args: string[]) {
   const { file: filePath, startLine, endLine } = parseGetArgs(args);
 
@@ -816,5 +827,18 @@ export function registerAllCommands(): void {
       { command: "config", description: "Display configuration help" },
     ],
     handler: configCommand,
+  });
+
+  commandRegister.register({
+    name: "version",
+    description: "Show the version number",
+    usage: "version",
+    arguments: [],
+    shorthand: "-v",
+    examples: [
+      { command: "version", description: "Show version number" },
+      { command: "-v", description: "Show version number (shorthand)" },
+    ],
+    handler: versionCommand,
   });
 }
