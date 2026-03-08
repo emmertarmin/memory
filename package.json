@@ -1,0 +1,19 @@
+{
+  "name": "memory",
+  "version": "0.1.0",
+  "bin": {
+    "memory": "./src/index.ts"
+  },
+  "type": "module",
+  "module": "index.ts",
+  "scripts": {
+    "test": "bun test tests/*.test.ts",
+    "tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
