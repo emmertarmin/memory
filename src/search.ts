@@ -1,4 +1,5 @@
 import type { MemoryConfig } from "./config.js";
+import { getActiveProvider } from "./config.js";
 import { findSimilarChunks, getChunkContent, type SearchResult } from "./db.js";
 import { generateEmbeddings } from "./embeddings.js";
 
@@ -8,7 +9,7 @@ export interface RerankedResult extends SearchResult {
 }
 
 /**
- * Rerank search results using an LLM to better match query intent
+ * Rerank search results using the configured provider's LLM
  * Returns results scored from 0-100, normalized to 0-1
  */
 export async function rerankResults(
@@ -20,10 +21,19 @@ export async function rerankResults(
     return [];
   }
 
-  const reranked: RerankedResult[] = [];
+  const { provider, error } = getActiveProvider(config);
+  
+  if (!provider || error) {
+    // Fall back to original scores if no provider available
+    return results.map((result) => ({
+      ...result,
+      rerankScore: result.score * 100,
+      originalScore: result.score,
+    }));
+  }
 
-  // Process in parallel with limited concurrency
-  const maxConcurrent = 30;
+  // Get max concurrent from provider config or default
+  const maxConcurrent = (config.providers[0] as { rerankMaxConcurrent?: number }).rerankMaxConcurrent || 30;
   const batchSize = Math.min(results.length, maxConcurrent);
 
   // Create batches
@@ -31,6 +41,8 @@ export async function rerankResults(
   for (let i = 0; i < results.length; i += batchSize) {
     batches.push(results.slice(i, i + batchSize));
   }
+
+  const reranked: RerankedResult[] = [];
 
   for (const batch of batches) {
     // Process batch in parallel
@@ -43,17 +55,17 @@ export async function rerankResults(
           // Fall back to preview if full content unavailable
           return {
             ...result,
-            rerankScore: result.score * 100, // Use original similarity score
+            rerankScore: result.score * 100,
             originalScore: result.score,
           };
         }
 
-        // Call LLM to rerank
-        const score = await getRerankScore(query, content, config);
+        // Call provider to rerank
+        const rerankResult = await provider.rerank({ query, content });
 
         return {
           ...result,
-          rerankScore: score,
+          rerankScore: rerankResult.error ? result.score * 100 : rerankResult.score,
           originalScore: result.score,
         };
       } catch (error) {
@@ -74,63 +86,6 @@ export async function rerankResults(
   reranked.sort((a, b) => b.rerankScore - a.rerankScore);
 
   return reranked;
-}
-
-/**
- * Get rerank score from LLM (0-100)
- */
-async function getRerankScore(
-  query: string,
-  content: string,
-  config: MemoryConfig,
-): Promise<number> {
-  // Use chat completions API for reranking
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.rerankModel,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a relevance scorer. Rate how well the document answers the query. Respond with ONLY a number from 0-100.",
-        },
-        {
-          role: "user",
-          content: `Query: "${query}"\n\nDocument: "${content.slice(0, 1000)}"\n\nRate relevance (0-100):`,
-        },
-      ],
-      temperature: 0,
-      max_tokens: 10,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Reranking API error: ${response.status}`);
-  }
-
-  const data = (await response.json()) as {
-    choices: Array<{
-      message: {
-        content: string;
-      };
-    }>;
-  };
-
-  const content_response = data.choices[0]?.message?.content?.trim() || "50";
-
-  // Extract numeric score
-  const match = content_response.match(/(\d+)/);
-  if (match) {
-    const score = parseInt(match[1], 10);
-    return Math.max(0, Math.min(100, score)); // Clamp to 0-100
-  }
-
-  return 50; // Default middle score if parsing fails
 }
 
 /**

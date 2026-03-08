@@ -156,7 +156,7 @@ More content here.
     expect(exitCode).toBe(0);
     expect(stdout).toContain("memory - Markdown indexing and semantic search");
     expect(stdout).toContain("index");
-    expect(stdout).toContain("setup");
+    expect(stdout).toContain("config");
   });
 
   it("should error on unknown command", async () => {

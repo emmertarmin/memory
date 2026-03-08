@@ -19,11 +19,17 @@ export function getTestDb() {
 }
 
 export async function setupTestDataDir() {
-  // Create test config file - simplified structure
+  // Create test config file with new provider-based structure
   const testConfig = {
-    embeddingModel: "text-embedding-3-small",
-    rerankModel: "gpt-5-mini",
-    apiKey: "sk-test-api-key-for-testing",
+    providers: [
+      {
+        type: "openai",
+        apiKey: "sk-test-api-key-for-testing",
+        embeddingModel: "text-embedding-3-small",
+        rerankModel: "gpt-5-mini",
+      },
+    ],
+    watched: [],
   };
 
   await writeFile(TEST_CONFIG_PATH, JSON.stringify(testConfig, null, 2));

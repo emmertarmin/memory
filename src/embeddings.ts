@@ -1,104 +1,25 @@
 import type { MemoryConfig } from "./config.js";
-
-export interface EmbeddingResult {
-  index: number;
-  embedding: Float32Array;
-  dimensions: number;
-}
-
-export interface BatchEmbeddingResult {
-  results: EmbeddingResult[];
-  error?: string;
-}
+import { getActiveProvider } from "./config.js";
+import type { EmbeddingResult, BatchEmbeddingResult } from "./providers/base.js";
+export type { EmbeddingResult, BatchEmbeddingResult };
 
 /**
- * Generate embeddings for a batch of texts using OpenAI API
+ * Generate embeddings for a batch of texts using the configured provider
  */
 export async function generateEmbeddings(
   texts: string[],
   config: MemoryConfig,
 ): Promise<BatchEmbeddingResult> {
-  if (!config.apiKey || config.apiKey.trim() === "") {
+  const { provider, error } = getActiveProvider(config);
+  
+  if (!provider || error) {
     return {
       results: [],
-      error: "OpenAI API key is not configured",
+      error: error || "No provider configured",
     };
   }
 
-  // Clean and validate texts
-  const validTexts = texts.map((t) => t.trim()).filter((t) => t.length > 0);
-
-  if (validTexts.length === 0) {
-    return {
-      results: [],
-      error: "No valid texts to embed",
-    };
-  }
-
-  // Infer dimensions from model name
-  const dimensions = config.embeddingModel.includes("large")
-    ? 3072
-    : config.embeddingModel.includes("small")
-      ? 1536
-      : 1536;
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        input: validTexts,
-        model: config.embeddingModel,
-        dimensions: dimensions,
-        encoding_format: "float",
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = (await response.json().catch(() => ({}))) as {
-        error?: { message?: string };
-      };
-      const errorMessage =
-        errorData.error?.message || `API request failed with status ${response.status}`;
-      return {
-        results: [],
-        error: errorMessage,
-      };
-    }
-
-    const data = (await response.json()) as {
-      data: Array<{
-        embedding: number[];
-        index: number;
-        object: string;
-      }>;
-      model: string;
-      usage: {
-        prompt_tokens: number;
-        total_tokens: number;
-      };
-    };
-
-    const results: EmbeddingResult[] = data.data.map((item) => ({
-      index: item.index,
-      embedding: new Float32Array(item.embedding),
-      dimensions: item.embedding.length,
-    }));
-
-    // Sort by original index to maintain order
-    results.sort((a, b) => a.index - b.index);
-
-    return { results };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      results: [],
-      error: `Failed to generate embeddings: ${errorMessage}`,
-    };
-  }
+  return await provider.generateEmbeddings(texts);
 }
 
 /**
@@ -110,14 +31,24 @@ export async function generateEmbeddingsBatched(
   config: MemoryConfig,
   onProgress?: (completed: number, total: number) => void,
 ): Promise<BatchEmbeddingResult> {
-  const batchSize = 100; // Hardcoded batch size
+  const { provider, error } = getActiveProvider(config);
+  
+  if (!provider || error) {
+    return {
+      results: [],
+      error: error || "No provider configured",
+    };
+  }
+
+  // Use provider's configured batch size or default to 100
+  const batchSize = (config.providers[0] as { embeddingBatchSize?: number }).embeddingBatchSize || 100;
   const results: EmbeddingResult[] = [];
   const total = texts.length;
 
   // Process in batches
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);
-    const batchResult = await generateEmbeddings(batch, config);
+    const batchResult = await provider.generateEmbeddings(batch);
 
     if (batchResult.error) {
       return {
@@ -195,4 +126,17 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   }
 
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+/**
+ * Get the embedding dimensions from the active provider
+ */
+export function getEmbeddingDimensions(config: MemoryConfig): number {
+  const { provider, error } = getActiveProvider(config);
+  
+  if (!provider || error) {
+    return 1536; // default fallback
+  }
+  
+  return provider.getEmbeddingDimensions();
 }

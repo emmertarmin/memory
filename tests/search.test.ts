@@ -60,7 +60,7 @@ describe("Search Command", () => {
 
     // Check if real API key exists
     const config = JSON.parse(await Bun.file(TEST_CONFIG_PATH).text());
-    hasRealApiKey = config.apiKey && config.apiKey !== "sk-test-api-key-for-testing";
+    hasRealApiKey = config.providers?.[0]?.apiKey && config.providers[0].apiKey !== "sk-test-api-key-for-testing";
   });
 
   afterAll(async () => {
@@ -85,9 +85,14 @@ It should be automatically indexed before search runs.
 
     // Create config with watched path
     const configWithWatched = {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "sk-test-api-key-for-testing",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "sk-test-api-key-for-testing",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
       watched: [watchedDir],
     };
     await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(configWithWatched, null, 2));
@@ -115,9 +120,14 @@ It should be automatically indexed before search runs.
 
     // Reset config
     const originalConfig = {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "sk-test-api-key-for-testing",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "sk-test-api-key-for-testing",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
     };
     await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(originalConfig, null, 2));
   }, 60000);
@@ -125,9 +135,14 @@ It should be automatically indexed before search runs.
   it("should handle search gracefully when auto-indexing fails", async () => {
     // Configure watched path that doesn't exist
     const configWithBadWatched = {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "sk-test-api-key-for-testing",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "sk-test-api-key-for-testing",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
       watched: ["/nonexistent/path/that/does/not/exist"],
     };
     await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(configWithBadWatched, null, 2));
@@ -197,9 +212,14 @@ Search should still work even if auto-indexing fails.
 
     // Reset config
     const originalConfig = {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "sk-test-api-key-for-testing",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "sk-test-api-key-for-testing",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
     };
     await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify(originalConfig, null, 2));
   }, 30000);

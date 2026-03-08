@@ -344,13 +344,13 @@ describe("Indexer - Future Features (TDD)", () => {
     const testConfig = await loadTestConfig();
 
     // Only test with real API key
-    if (!testConfig.apiKey || testConfig.apiKey === "sk-test-api-key-for-testing") {
+    const apiKey = testConfig.providers?.[0]?.apiKey;
+    if (!apiKey || apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping - no real API key available");
       return;
     }
 
     const content = "Text to embed";
-    const apiKey = testConfig.apiKey;
     expect(apiKey).toBeDefined();
 
     // Call OpenAI API directly
@@ -362,7 +362,7 @@ describe("Indexer - Future Features (TDD)", () => {
       },
       body: JSON.stringify({
         input: content,
-        model: testConfig.embeddingModel,
+        model: testConfig.providers[0].embeddingModel,
       }),
     });
 
@@ -378,7 +378,8 @@ describe("Indexer - Future Features (TDD)", () => {
     const testConfig = await loadTestConfig();
 
     // Only test with real API key
-    if (!testConfig.apiKey || testConfig.apiKey === "sk-test-api-key-for-testing") {
+    const apiKey = testConfig.providers?.[0]?.apiKey;
+    if (!apiKey || apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping - no real API key available");
       return;
     }
@@ -465,11 +466,16 @@ describe("Indexer - Future Features (TDD)", () => {
   it("should handle API errors gracefully", async () => {
     const { generateEmbeddings } = await import("../src/embeddings");
 
-    // Test with invalid API key
+    // Test with invalid API key using new config structure
     const result = await generateEmbeddings(["test content"], {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "sk-invalid-test-key",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "sk-invalid-test-key",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
     });
 
     expect(result.error).toBeDefined();

@@ -15,7 +15,7 @@ import {
   countChunksForFile,
 } from "./db.js";
 import { chunkText, createPreview, type ChunkerConfig } from "./chunker.js";
-import { ensureConfig, validateConfig, runSetup, type MemoryConfig } from "./config.js";
+import { ensureConfig, validateConfig, generateConfigHelp, type MemoryConfig } from "./config.js";
 import { generateEmbeddingsBatched, embeddingToBuffer } from "./embeddings.js";
 
 // Command argument definition
@@ -104,6 +104,7 @@ export class CommandRegister {
 
     lines.push("");
     lines.push("Run 'memory <command> --help' for more information on a command.");
+    lines.push("Run 'memory config --help' for configuration information.");
 
     return lines.join("\n");
   }
@@ -374,11 +375,11 @@ async function loadValidatedConfig(): Promise<MemoryConfig> {
   const config = await ensureConfig();
   const validation = validateConfig(config);
   if (!validation.valid) {
-    console.error("❌ Configuration error. Missing:");
-    for (const missing of validation.missing) {
+    console.error("Configuration error. Missing:");
+    for (const missing of validation.errors) {
       console.error(`   - ${missing}`);
     }
-    console.error("\nRun setup to configure: memory setup");
+    console.error("\nRun 'memory config --help' to see configuration help.");
     process.exit(5);
   }
   return config;
@@ -742,13 +743,8 @@ async function getCommand(args: string[]) {
   }
 }
 
-async function setupCommand(_args: string[]) {
-  try {
-    await runSetup();
-  } catch (error) {
-    console.error("Setup failed:", error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+function configCommand(_args: string[]) {
+  console.log(generateConfigHelp());
 }
 
 // Register all commands
@@ -812,13 +808,13 @@ export function registerAllCommands(): void {
   });
 
   commandRegister.register({
-    name: "setup",
-    description: "Configure memory settings and watched paths",
-    usage: "setup",
+    name: "config",
+    description: "Show configuration help and provider schemas",
+    usage: "config",
     arguments: [],
     examples: [
-      { command: "setup" },
+      { command: "config", description: "Display configuration help" },
     ],
-    handler: setupCommand,
+    handler: configCommand,
   });
 }

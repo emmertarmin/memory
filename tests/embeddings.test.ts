@@ -27,9 +27,14 @@ describe("Embeddings Generation", () => {
 
   it("should fail gracefully with invalid API key", async () => {
     const result = await generateEmbeddings(["test text"], {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "invalid-key",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "invalid-key",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
     });
 
     expect(result.error).toBeDefined();
@@ -38,12 +43,17 @@ describe("Embeddings Generation", () => {
 
   it("should fail gracefully with empty API key", async () => {
     const result = await generateEmbeddings(["test text"], {
-      embeddingModel: "text-embedding-3-small",
-      rerankModel: "gpt-5-mini",
-      apiKey: "",
+      providers: [
+        {
+          type: "openai",
+          apiKey: "",
+          embeddingModel: "text-embedding-3-small",
+          rerankModel: "gpt-5-mini",
+        },
+      ],
     });
 
-    expect(result.error).toBe("OpenAI API key is not configured");
+    expect(result.error).toBe("Provider validation failed: apiKey is required");
     expect(result.results.length).toBe(0);
   });
 
@@ -61,7 +71,8 @@ describe("Embeddings Generation", () => {
     const config = await loadTestConfig();
 
     // Check if we're using a real API key (not the test key)
-    if (!config.apiKey || config.apiKey === "sk-test-api-key-for-testing") {
+    const apiKey = config.providers?.[0]?.apiKey;
+    if (!apiKey || apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping real API test - using test API key");
       return;
     }
@@ -79,7 +90,8 @@ describe("Embeddings Generation", () => {
     const config = await loadTestConfig();
 
     // Check if we're using a real API key
-    if (!config.apiKey || config.apiKey === "sk-test-api-key-for-testing") {
+    const apiKey = config.providers?.[0]?.apiKey;
+    if (!apiKey || apiKey === "sk-test-api-key-for-testing") {
       console.log("Skipping batch test - using test API key");
       return;
     }
