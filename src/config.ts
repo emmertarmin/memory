@@ -22,7 +22,7 @@ export const DATA_DIR = path.join(XDG_DATA_HOME, "memory");
  */
 export interface MemoryConfig {
   providers: ProviderConfig[];
-  watched?: string[]; // Optional: folders/files to watch for auto-indexing
+  sources?: string[]; // Optional: folders/files to auto-index as memory sources
 }
 
 // Check if config exists
@@ -52,7 +52,7 @@ export async function loadConfig(): Promise<MemoryConfig | null> {
 
     return {
       providers: parsed.providers,
-      watched: parsed.watched || [],
+      sources: parsed.sources || [],
     };
   } catch (error) {
     console.error("Error loading config:", error);

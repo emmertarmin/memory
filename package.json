@@ -2,9 +2,30 @@
   "name": "@emmertarmin/memory",
   "version": "0.1.0",
   "description": "AI-powered memory and context management for LLM applications",
+  "homepage": "https://github.com/emmertarmin/memory#readme",
+  "bugs": {
+    "url": "https://github.com/emmertarmin/memory/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emmertarmin/memory.git"
+  },
   "license": "MIT",
+  "author": "Armin Emmert",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
-    "memory": "./dist/index.js"
+    "memory": "dist/index.js"
+  },
+  "directories": {
+    "test": "tests"
   },
   "files": [
     "dist/**/*.js",
@@ -12,16 +33,6 @@
     "README.md",
     "LICENSE"
   ],
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
   "scripts": {
     "test": "bun test tests/*.test.ts",
     "tsc": "tsc --noEmit",
@@ -30,11 +41,16 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "bun run clean && bun run build"
   },
+  "dependencies": {
+    "bun-types": "^1.3.10",
+    "undici-types": "^7.18.2"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5"
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "module": "./dist/index.js"
 }

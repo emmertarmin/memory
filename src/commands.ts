@@ -392,13 +392,13 @@ interface EnsureFreshIndexResult {
   skipped: number;
 }
 
-// Silently ensures watched paths are fresh, without stdout output
+// Silently ensures source paths are fresh, without stdout output
 // Returns result object and logs errors only to stderr
 async function ensureFreshIndex(
   memConfig: MemoryConfig,
   silent: boolean = true,
 ): Promise<EnsureFreshIndexResult> {
-  if (!memConfig.watched || memConfig.watched.length === 0) {
+  if (!memConfig.sources || memConfig.sources.length === 0) {
     return { updated: false, errors: [], indexed: 0, skipped: 0 };
   }
 
@@ -415,7 +415,7 @@ async function ensureFreshIndex(
     skipped: 0,
   };
 
-  const targetPaths = memConfig.watched.map((p) => path.resolve(expandTilde(p)));
+  const targetPaths = memConfig.sources.map((p) => path.resolve(expandTilde(p)));
 
   // Clean up orphaned files
   try {
@@ -475,18 +475,18 @@ async function ensureFreshIndex(
 
 // Command handlers
 
-function parseIndexArgs(args: string[], watchedPaths?: string[]) {
+function parseIndexArgs(args: string[], sourcePaths?: string[]) {
   if (args.length === 0) {
-    if (watchedPaths && watchedPaths.length > 0) {
+    if (sourcePaths && sourcePaths.length > 0) {
       return {
-        paths: watchedPaths.map((p) => path.resolve(expandTilde(p))),
+        paths: sourcePaths.map((p) => path.resolve(expandTilde(p))),
         force: false,
         config: {
           targetTokens: 400,
           overlapTokens: 50,
           lineBoundary: true,
         } as ChunkerConfig,
-        useWatched: true,
+        useSources: true,
       };
     }
     return {
@@ -497,7 +497,7 @@ function parseIndexArgs(args: string[], watchedPaths?: string[]) {
         overlapTokens: 50,
         lineBoundary: true,
       } as ChunkerConfig,
-      useWatched: false,
+      useSources: false,
     };
   }
 
@@ -527,7 +527,7 @@ function parseIndexArgs(args: string[], watchedPaths?: string[]) {
       overlapTokens: overlap,
       lineBoundary: true,
     } as ChunkerConfig,
-    useWatched: false,
+    useSources: false,
   };
 }
 
@@ -537,14 +537,14 @@ async function indexCommand(args: string[]) {
     paths: targetPaths,
     force,
     config: chunkConfig,
-    useWatched,
-  } = parseIndexArgs(args, memConfig.watched);
+    useSources,
+  } = parseIndexArgs(args, memConfig.sources);
 
   initSchema();
   const startTime = Date.now();
   const { deleted, totalChunksRemoved } = await cleanupOrphanedFiles();
 
-  if (targetPaths.length === 0 && !useWatched) {
+  if (targetPaths.length === 0 && !useSources) {
     const durationMs = Date.now() - startTime;
     console.log(
       JSON.stringify({
@@ -557,7 +557,7 @@ async function indexCommand(args: string[]) {
           durationMs,
         },
         message:
-          "No paths specified and no watched paths configured. Use 'memory index <path>' or configure watched paths.",
+          "No paths specified and no sources configured. Use 'memory index <path>' or configure sources.",
       }),
     );
     return;
@@ -766,11 +766,17 @@ function configCommand(_args: string[]) {
   console.log(generateConfigHelp());
 }
 
+async function sourcesCommand(_args: string[]) {
+  const memConfig = await loadValidatedConfig();
+  const absolutePaths = (memConfig.sources || []).map((p) => path.resolve(expandTilde(p)));
+  console.log(JSON.stringify(absolutePaths));
+}
+
 // Register all commands
 export function registerAllCommands(): void {
   commandRegister.register({
     name: "index",
-    description: "Index a file or directory (or watched paths if no path specified)",
+    description: "Index a file or directory (or configured sources if no path specified)",
     usage: "index <path> [--force] [--chunk-size <n>] [--overlap <n>]",
     arguments: [{ name: "<path>", description: "File or directory to index", optional: true }],
     options: [
@@ -785,7 +791,7 @@ export function registerAllCommands(): void {
         command: "index ./notes/ --chunk-size 300",
         description: "Index directory with custom chunk size",
       },
-      { command: "index", description: "Index all watched paths from config" },
+      { command: "index", description: "Index all configured sources" },
     ],
     handler: indexCommand,
   });
@@ -833,6 +839,16 @@ export function registerAllCommands(): void {
     arguments: [],
     examples: [{ command: "config", description: "Display configuration help" }],
     handler: configCommand,
+  });
+
+  commandRegister.register({
+    name: "sources",
+    description: "Show configured memory source paths",
+    usage: "sources",
+    arguments: [],
+    returns: '["/absolute/path/to/source1", "/absolute/path/to/source2"]',
+    examples: [{ command: "sources", description: "Display configured source paths as JSON" }],
+    handler: sourcesCommand,
   });
 
   commandRegister.register({

@@ -69,7 +69,7 @@ export function generateProviderHelp(): string {
           /* see provider-specific config below */
         },
       ],
-      watched: ["./docs", "./notes"],
+      sources: ["./docs", "./notes"],
     },
     null,
     2,
