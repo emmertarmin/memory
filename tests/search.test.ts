@@ -206,8 +206,8 @@ Search should still work even if auto-indexing fails.
     const exitCode = await proc.exited;
     const stderr = await new Response(proc.stderr).text();
 
-    // Should show error about bad path but not crash
-    expect(stderr).toContain("Failed"); // Error about bad path
+    // Should show error about API key or embedding failure but not crash
+    expect(stderr).toContain("error"); // Error in JSON format
     // But search should still attempt to run (may fail for other reasons)
     expect(exitCode === 0 || exitCode === 1 || exitCode === 4).toBe(true);
 

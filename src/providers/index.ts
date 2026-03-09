@@ -1,10 +1,12 @@
 import { BaseProvider, type ProviderConfigSchema } from "./base.js";
 import { OpenAIProvider, type OpenAIProviderConfig } from "./openai.js";
+import { OllamaProvider, type OllamaProviderConfig } from "./ollama.js";
 
 export * from "./base.js";
 export * from "./openai.js";
+export * from "./ollama.js";
 
-export type ProviderConfig = OpenAIProviderConfig;
+export type ProviderConfig = OpenAIProviderConfig | OllamaProviderConfig;
 
 /**
  * Factory function to create a provider instance from configuration
@@ -13,6 +15,8 @@ export function createProvider(config: ProviderConfig): BaseProvider {
   switch (config.type) {
     case "openai":
       return new OpenAIProvider(config);
+    case "ollama":
+      return new OllamaProvider(config);
     default:
       throw new Error(`Unknown provider type: ${(config as { type: string }).type}`);
   }
@@ -26,6 +30,11 @@ export function getAvailableProviderSchemas(): ProviderConfigSchema[] {
     new OpenAIProvider({
       type: "openai",
       apiKey: "",
+      embeddingModel: "",
+      rerankModel: "",
+    }).getConfigSchema(),
+    new OllamaProvider({
+      type: "ollama",
       embeddingModel: "",
       rerankModel: "",
     }).getConfigSchema(),
@@ -86,12 +95,26 @@ export function generateProviderHelp(): string {
     2,
   );
 
+  const ollamaExample = JSON.stringify(
+    {
+      type: "ollama",
+      url: "http://localhost:11434",
+      embeddingModel: "qwen3-embedding:8b",
+      rerankModel: "qwen3:8b",
+    },
+    null,
+    2,
+  );
+
   const lines: string[] = [
     "Full config example:",
     "  " + fullConfigExample.replace(/\n/g, "\n  "),
     "",
     "OpenAI provider example:",
     "  " + openaiExample.replace(/\n/g, "\n  "),
+    "",
+    "Ollama provider example:",
+    "  " + ollamaExample.replace(/\n/g, "\n  "),
     "",
     "Note: The first provider in the array is used by default.",
   ];

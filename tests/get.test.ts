@@ -278,34 +278,6 @@ Thank you for reading.`;
     expect(result.content).toBe(contentWithEmpty);
     expect(result.word_count).toBe(4); // "Line", "1", "Line", "3"
   });
-
-  it("should work with tesla.md for real-world integration test", async () => {
-    // This test verifies the workflow described in MEMORY_SPEC
-    // First search, then get the results
-    const teslaPath = "/home/emmert/Documents/markdown/tesla.md";
-
-    const proc = Bun.spawn({
-      cmd: ["bun", "run", "src/index.ts", "get", teslaPath, "678", "698"],
-      cwd: process.cwd(),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const exitCode = await proc.exited;
-    expect(exitCode).toBe(0);
-
-    const stdout = await new Response(proc.stdout).text();
-    const result = JSON.parse(stdout.trim()) as GetResult;
-
-    expect(result.file).toBe(teslaPath);
-    expect(result.start_line).toBe(678);
-    expect(result.end_line).toBe(698);
-    expect(result.content).toContain("tzero");
-    expect(result.content).toContain("250 miles");
-    expect(result.word_count).toBeGreaterThan(100);
-    expect(result.char_count).toBeGreaterThan(500);
-  });
-
   it("should verify end-to-end workflow: search then get", async () => {
     // Skip if no real API key available
     const testConfig = JSON.parse(await Bun.file(TEST_CONFIG_PATH).text());

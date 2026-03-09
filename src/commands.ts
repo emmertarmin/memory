@@ -215,19 +215,43 @@ async function cleanupOrphanedFiles(): Promise<{
   return { deleted, totalChunksRemoved };
 }
 
-async function indexFile(
-  filePath: string,
-  chunkConfig: ChunkerConfig,
-  memConfig: MemoryConfig,
-  force: boolean = false,
-): Promise<{
+// Type for index operation results
+interface IndexResult {
   file: string;
   chunkSize: number;
   chunksIndexed: number;
   chunksSkipped: number;
   linesTotal: number;
   status: string;
-}> {
+  durationMs: number;
+}
+
+// Helper to log verbose indexing progress
+function logIndexProgress(result: IndexResult): void {
+  const totalChunks = result.chunksIndexed + result.chunksSkipped;
+  const avgPer1000 =
+    result.chunksIndexed > 0
+      ? ((result.durationMs / result.chunksIndexed) * 1000).toFixed(1)
+      : "0.0";
+  console.error(
+    `[index] ${result.file} | chunks: ${totalChunks} (${result.chunksIndexed} new, ${result.chunksSkipped} skipped) | time: ${result.durationMs}ms | avg/1000: ${avgPer1000}ms`,
+  );
+}
+
+// Helper to log verbose indexing errors
+function logIndexError(filePath: string, error: unknown): void {
+  console.error(
+    `[index] ${filePath} | ERROR: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
+async function indexFile(
+  filePath: string,
+  chunkConfig: ChunkerConfig,
+  memConfig: MemoryConfig,
+  force: boolean = false,
+): Promise<IndexResult> {
+  const fileStartTime = Date.now();
   const file = Bun.file(filePath);
   const exists = await file.exists();
   if (!exists) {
@@ -249,6 +273,7 @@ async function indexFile(
       chunksSkipped: existingChunks.length,
       linesTotal: totalLines,
       status: "success",
+      durationMs: Date.now() - fileStartTime,
     };
   }
 
@@ -292,6 +317,7 @@ async function indexFile(
     chunksSkipped: 0,
     linesTotal: totalLines,
     status: "success",
+    durationMs: Date.now() - fileStartTime,
   };
 }
 
@@ -309,6 +335,7 @@ async function indexDirectory(
   chunkConfig: ChunkerConfig,
   memConfig: MemoryConfig,
   force: boolean = false,
+  verbose: boolean = false,
 ): Promise<{
   indexed: Array<{
     file: string;
@@ -317,6 +344,7 @@ async function indexDirectory(
     chunksSkipped: number;
     linesTotal: number;
     status: string;
+    durationMs: number;
   }>;
   statistics: {
     totalChunksIndexed: number;
@@ -331,6 +359,7 @@ async function indexDirectory(
     chunksSkipped: number;
     linesTotal: number;
     status: string;
+    durationMs: number;
   }> = [];
   let totalChunksIndexed = 0;
   let totalChunksSkipped = 0;
@@ -341,7 +370,12 @@ async function indexDirectory(
       indexed.push(result);
       totalChunksIndexed += result.chunksIndexed;
       totalChunksSkipped += result.chunksSkipped;
+
+      if (verbose) {
+        logIndexProgress(result);
+      }
     } catch (error) {
+      const errorDuration = 0;
       indexed.push({
         file: filePath,
         chunkSize: chunkConfig.targetTokens,
@@ -349,7 +383,11 @@ async function indexDirectory(
         chunksSkipped: 0,
         linesTotal: 0,
         status: "error",
+        durationMs: errorDuration,
       });
+      if (verbose) {
+        logIndexError(filePath, error);
+      }
     }
   }
 
@@ -476,57 +514,62 @@ async function ensureFreshIndex(
 // Command handlers
 
 function parseIndexArgs(args: string[], sourcePaths?: string[]) {
-  if (args.length === 0) {
-    if (sourcePaths && sourcePaths.length > 0) {
-      return {
-        paths: sourcePaths.map((p) => path.resolve(expandTilde(p))),
-        force: false,
-        config: {
-          targetTokens: 400,
-          overlapTokens: 50,
-          lineBoundary: true,
-        } as ChunkerConfig,
-        useSources: true,
-      };
-    }
-    return {
-      paths: [],
-      force: false,
-      config: {
-        targetTokens: 400,
-        overlapTokens: 50,
-        lineBoundary: true,
-      } as ChunkerConfig,
-      useSources: false,
-    };
-  }
-
-  const pathArg = args[0];
+  // First, parse all flags from args
   let force = false;
+  let verbose = false;
   let chunkSize = 400;
   let overlap = 50;
+  const remainingArgs: string[] = [];
 
-  for (let i = 1; i < args.length; i++) {
+  for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--force") {
       force = true;
+    } else if (arg === "--verbose") {
+      verbose = true;
     } else if (arg === "--chunk-size" && i + 1 < args.length) {
       chunkSize = parseInt(args[i + 1], 10);
       i++;
     } else if (arg === "--overlap" && i + 1 < args.length) {
       overlap = parseInt(args[i + 1], 10);
       i++;
+    } else {
+      remainingArgs.push(arg);
     }
   }
 
+  const config: ChunkerConfig = {
+    targetTokens: chunkSize,
+    overlapTokens: overlap,
+    lineBoundary: true,
+  };
+
+  // If no path argument remains, use configured sources if available
+  if (remainingArgs.length === 0) {
+    if (sourcePaths && sourcePaths.length > 0) {
+      return {
+        paths: sourcePaths.map((p) => path.resolve(expandTilde(p))),
+        force,
+        verbose,
+        config,
+        useSources: true,
+      };
+    }
+    return {
+      paths: [],
+      force,
+      verbose,
+      config,
+      useSources: false,
+    };
+  }
+
+  // Use the first remaining arg as the path
   return {
-    paths: [path.resolve(expandTilde(pathArg))],
+    paths: [path.resolve(expandTilde(remainingArgs[0]))],
     force,
-    config: {
-      targetTokens: chunkSize,
-      overlapTokens: overlap,
-      lineBoundary: true,
-    } as ChunkerConfig,
+    verbose,
+    config,
     useSources: false,
   };
 }
@@ -536,6 +579,7 @@ async function indexCommand(args: string[]) {
   const {
     paths: targetPaths,
     force,
+    verbose,
     config: chunkConfig,
     useSources,
   } = parseIndexArgs(args, memConfig.sources);
@@ -570,6 +614,7 @@ async function indexCommand(args: string[]) {
     chunksSkipped: number;
     linesTotal: number;
     status: string;
+    durationMs: number;
   }> = [];
   let totalChunksIndexed = 0;
   let totalChunksSkipped = 0;
@@ -577,7 +622,7 @@ async function indexCommand(args: string[]) {
   for (const targetPath of targetPaths) {
     const isDir = await isDirectory(targetPath);
     if (isDir) {
-      const dirResult = await indexDirectory(targetPath, chunkConfig, memConfig, force);
+      const dirResult = await indexDirectory(targetPath, chunkConfig, memConfig, force, verbose);
       indexed = indexed.concat(dirResult.indexed);
       totalChunksIndexed += dirResult.statistics.totalChunksIndexed;
       totalChunksSkipped += dirResult.statistics.totalChunksSkipped;
@@ -587,6 +632,10 @@ async function indexCommand(args: string[]) {
         indexed.push(result);
         totalChunksIndexed += result.chunksIndexed;
         totalChunksSkipped += result.chunksSkipped;
+
+        if (verbose) {
+          logIndexProgress(result);
+        }
       } catch (error) {
         indexed.push({
           file: targetPath,
@@ -595,7 +644,11 @@ async function indexCommand(args: string[]) {
           chunksSkipped: 0,
           linesTotal: 0,
           status: "error",
+          durationMs: 0,
         });
+        if (verbose) {
+          logIndexError(targetPath, error);
+        }
       }
     }
   }
@@ -777,12 +830,13 @@ export function registerAllCommands(): void {
   commandRegister.register({
     name: "index",
     description: "Index a file or directory (or configured sources if no path specified)",
-    usage: "index <path> [--force] [--chunk-size <n>] [--overlap <n>]",
+    usage: "index <path> [--force] [--chunk-size <n>] [--overlap <n>] [--verbose]",
     arguments: [{ name: "<path>", description: "File or directory to index", optional: true }],
     options: [
       { name: "--force", description: "Re-index even if file hash unchanged" },
       { name: "--chunk-size <n>", description: "Target chunk size in tokens (default: 400)" },
       { name: "--overlap <n>", description: "Overlap between chunks in tokens (default: 50)" },
+      { name: "--verbose", description: "Show progress per file with timing stats" },
     ],
     examples: [
       { command: "index file.md", description: "Index single file" },
@@ -792,6 +846,7 @@ export function registerAllCommands(): void {
         description: "Index directory with custom chunk size",
       },
       { command: "index", description: "Index all configured sources" },
+      { command: "index ./notes/ --verbose", description: "Show progress per file" },
     ],
     handler: indexCommand,
   });
